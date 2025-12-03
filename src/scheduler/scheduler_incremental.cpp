@@ -66,7 +66,20 @@ namespace Scheduling{
 						<<std::endl;
 #endif
 					if(task_to_trpt[task.id] < task_to_org_rate_mapping[task.id] * INTF_THRESHOLD){
-						if(task_to_intf_retry_flag[task.id]) return EXIT_FAILURE;
+						if(task_to_intf_retry_flag[task.id]) {
+							std::cerr << "SCHEDULING FAILED: Cannot meet throughput for model " << task.id 
+							          << " (" << getModelName(task.id) << ")" << std::endl;
+							std::cerr << "  Required rate: " << task_to_org_rate_mapping[task.id] << " RPS" << std::endl;
+							std::cerr << "  Achieved rate: " << task_to_trpt[task.id] << " RPS (" 
+							          << (task_to_trpt[task.id]/task_to_org_rate_mapping[task.id]*100) << "%)" << std::endl;
+							std::cerr << "  Threshold: " << (INTF_THRESHOLD*100) << "%" << std::endl;
+							std::cerr << "Suggestions:" << std::endl;
+							std::cerr << "  1. Reduce request rate in task config" << std::endl;
+							std::cerr << "  2. Increase SLO to allow larger batches" << std::endl;
+							std::cerr << "  3. Add more GPUs" << std::endl;
+							std::cerr << "  4. Disable interference temporarily (less accurate)" << std::endl;
+							return EXIT_FAILURE;
+						}
 #ifdef SCHED_DEBUG
 						std::cout << "[incrementalScheduling]: task_id: " << task.id << " remaining rate: " << task_to_org_rate_mapping[task.id] - task_to_trpt[task.id]
 							<<std::endl;    
@@ -1063,6 +1076,13 @@ int IncrementalScheduler::getMinPart(std::string device, Task task, const NodePt
 
 	bool IncrementalScheduler::checkFit(std::vector<NodePtr> &candidate_nodes, SimState &decision){
 			//check how much is required
+			if(candidate_nodes.empty()){
+#ifdef SCHED_DEBUG
+				printf("[checkFit] WARNING: Empty candidate_nodes list\n");
+#endif
+				return EXIT_FAILURE;
+			}
+			
 			int required_pntg=0;
 #ifdef SCHED_DEBUG
 			printf("[checkFit] Recieved type %s %lu nodes for checking \n", candidate_nodes[0]->type.c_str(),candidate_nodes.size());

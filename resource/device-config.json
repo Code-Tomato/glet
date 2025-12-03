@@ -1,18 +1,11 @@
 {
 	"device_specs":[
 	{
-	"type":"2080ti",
-	"mem_mb":11000,
-	"latency_prof_file": "2080ti/latency.csv",
-	"interference_const_file": "2080ti/INT_MODEL_CONSTANT.CSV",
-	"interference_util_file": "2080ti/UTIL.CSV"
-	},
-	{
-	"type":"3080",
-	"mem_mb":10200,
-	"latency_prof_file": "3080/latency.csv",
-	"interference_const_file": "3080/INT_MODEL_CONSTANT.CSV",
-	"interference_util_file": "3080/UTIL.CSV"
+		"type": "a100",
+		"mem_mb": 81920,
+		"latency_prof_file": "a100/LATENCY.CSV",
+		"interference_const_file": "a100/INT_MODEL_CONSTANT.CSV",
+		"interference_util_file": "a100/UTIL.CSV"
 	}
 	]
 }

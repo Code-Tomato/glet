@@ -147,10 +147,10 @@ class BaseScheduler {
 		std::map<std::string, int> _typeToNumofTypeTable;
 
 
-		std::vector<std::string> _IDtoModelName = {"lenet1", "lenet2", "lenet3",
-											"lenet4", "lenet5", "lenet6", "googlenet",
-											"resnet50", "ssd-mobilenetv1", "vgg16",
-											"mnasnet1_0", "mobilenet_v2", "densenet161", "bert"};
+		std::vector<std::string> _IDtoModelName = {"resnet50", "mobilenet_v3_large", "vgg11",
+											"resnet152", "densenet169", "densenet161", "vgg19",
+											"diffusion_1024_1024", "diffusion_256_256", "whisper",
+											"gpt"};
 		
 	};
 } //Scheduling

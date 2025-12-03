@@ -255,10 +255,25 @@ namespace Scheduling{
                         getline(fs,str_buf,',');
                         new_task.id=stoi(str_buf);
 
+                        // Validate model ID to prevent segfaults
+                        if (new_task.id < 0 || new_task.id >= _IDtoModelName.size()) {
+                                std::cerr << "ERROR: Invalid model ID " << new_task.id 
+                                          << " in " << task_csv_file << " (line " << (j+2) << ")" << std::endl;
+                                std::cerr << "Valid model IDs: 0-" << (_IDtoModelName.size()-1) << std::endl;
+                                std::cerr << "Model mapping:" << std::endl;
+                                for(int i=0; i < _IDtoModelName.size(); i++) {
+                                        std::cerr << "  " << i << ": " << _IDtoModelName[i] << std::endl;
+                                }
+                                exit(EXIT_FAILURE);
+                        }
+
                         getline(fs,str_buf,',');
                         new_task.request_rate=stoi(str_buf);
 #ifdef ADD_RATE
+								std::cout << "CHECKHERE: request rate: " << new_task.request_rate << std::endl;
+								std::cout << "adding rate" << std::endl;
                         new_task.request_rate = return99P(new_task.request_rate);
+						std::cout << "added rate" << std::endl;
 #endif
 
                         getline(fs,str_buf,',');
@@ -715,13 +730,15 @@ void BaseScheduler::fillReservedNodes(SimState &input){
 		if(modelname == "lenet1" || modelname == "lenet2" || modelname == "lenet3" || modelname == "lenet4" || modelname == "lenet5" || modelname == "lenet6"){
 			ret_latency=0.4;
 		}
-		else if(modelname == "resnet50" || modelname == "googlenet" || modelname == "vgg16" || modelname == "mnasnet1_0" || modelname == "mobilenet_v2" || modelname=="densenet161"){
+		else if(modelname == "resnet50" || modelname == "resnet152" || modelname == "mobilenet_v3_large" || 
+		        modelname == "vgg11" || modelname == "vgg19" || modelname == "densenet161" || modelname == "densenet169" ||
+		        modelname == "googlenet" || modelname == "vgg16" || modelname == "mnasnet1_0" || modelname == "mobilenet_v2"){
 			ret_latency = 1.9* _batch_latency_3_224_224[batch]; 
 		}
-		else if(modelname == "ssd-mobilenetv1"){
+		else if(modelname == "ssd-mobilenetv1" || modelname == "diffusion_1024_1024" || modelname == "diffusion_256_256"){
 			ret_latency = 2.5*_batch_latency_3_300_300[batch]; 
 		}
-		else if(modelname == "bert"){
+		else if(modelname == "bert" || modelname == "whisper" || modelname == "gpt"){
 			ret_latency=1;
 		}
 		else{
@@ -835,13 +852,36 @@ void BaseScheduler::fillReservedNodes(SimState &input){
 		//added for fast returning values that might take too long
 		// based on calculation value of 550: 10.02%
 		std::cout << "received: " << mean << std::endl;
-		if(mean > 550) return mean*1.1;
+		
+		// Handle edge cases for very small or very large means
+		if(mean <= 0) {
+			std::cout << "returning new_mean: 1 (mean too small)" << std::endl;
+			return 1;
+		}
+		if(mean > 550) {
+			int result = mean * 1.1;
+			std::cout << "returning new_mean: " << result << " (mean > 550)" << std::endl;
+			return result;
+		}
+		
 		double prob_sum=0.0;
 		int new_mean=1;
+		int max_iterations = mean * 3 + 100;  // Prevent infinite loops
+		int iterations = 0;
+		
 		do{ 
 			double prob=calcPoissProb(new_mean,mean);
 			prob_sum+=prob;
 			new_mean++;
+			iterations++;
+			
+			// Safety check to prevent freezing
+			if(iterations > max_iterations) {
+				std::cerr << "WARNING: Poisson calculation exceeded max iterations for mean=" << mean << std::endl;
+				std::cerr << "  Using approximation: mean * 1.5" << std::endl;
+				new_mean = mean * 1.5;
+				break;
+			}
 		}while(prob_sum < 0.99 );
 		std::cout << "returning new_mean: "<< new_mean << std::endl; 
 		return new_mean;

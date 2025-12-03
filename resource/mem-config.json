@@ -1,49 +1,38 @@
 {
     "models":[
         {
-            "name":"lenet1",
-            "mem":50
-        },{
-            "name":"lenet2",
-            "mem":50
-        },{
-            "name":"lenet3",
-            "mem":50
-        },{
-            "name":"lenet4",
-            "mem":50
-        },{
-            "name":"lenet5",
-            "mem":50
-        },{
-            "name":"lenet6",
-            "mem":50
-        },{
-            "name":"googlenet",
-            "mem":1720
-        },{
             "name":"resnet50",
-            "mem":1820
+            "mem":38166
         },{
-            "name":"ssd-mobilenetv1",
-            "mem":640
+            "name":"mobilenet_v3_large",
+            "mem":25038
         },{
-            "name":"vgg16",
-            "mem":2920
+            "name":"vgg11",
+            "mem":37450
+        },{
+            "name":"resnet152",
+            "mem":40378
+        },{
+            "name":"densenet169",
+            "mem":29712
         },{
             "name":"densenet161",
-            "mem":1220
+            "mem":30373
         },{
-            "name":"mobilenet_v2",
-            "mem":464
+            "name":"vgg19",
+            "mem":37715
         },{
-            "name":"mnasnet1_0",
-            "mem":1550
+            "name":"diffusion_1024_1024",
+            "mem":34633
         },{
-            "name":"bert",
-            "mem":500
+            "name":"diffusion_256_256",
+            "mem":24247
+        },{
+            "name":"whisper",
+            "mem":19858
+        },{
+            "name":"gpt",
+            "mem":38728
         }
-
     ]
-
 }

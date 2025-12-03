@@ -130,9 +130,13 @@ std::pair<int,int> findBatchpair(std::vector<int> &list, int batch, int part)
 
 float LatencyModel::getLatency(std::string model, int batch, int part){
     assert(MIN_BATCH <= batch && batch <= MAX_BATCH);
+    // Normalize model names to match latency.csv entries
     if (model == "lenet1" || model == "lenet2" || model == "lenet3" \
     || model == "lenet4" || model == "lenet5" || model=="lenet6"){
         model="lenet1";
+    }
+    if (model == "ssd-mobilenetv1"){
+        model="ssd";
     }
     // if not found, return 0
     if (_perModelLatnecyTable.find(model) == _perModelLatnecyTable.end())
@@ -153,9 +157,13 @@ float LatencyModel::getLatency(std::string model, int batch, int part){
 
 float LatencyModel::getGPURatio(std::string model, int batch, int part){
      assert(MIN_BATCH <= batch && batch <= MAX_BATCH);
+    // Normalize model names to match latency.csv entries
     if (model == "lenet1" || model == "lenet2" || model == "lenet3" \
     || model == "lenet4" || model == "lenet5" || model=="lenet6"){
         model="lenet1";
+    }
+    if (model == "ssd-mobilenetv1"){
+        model="ssd";
     }
     uint64_t p1,p2,p3,p4;
     // if batch is in the table, lookup and return

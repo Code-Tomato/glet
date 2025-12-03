@@ -13,6 +13,7 @@
 namespace po = boost::program_options;
 
 std::vector<int> AVAIL_PARTS;
+bool VERBOSE_MODE = false;
 
 po::variables_map parse_opts(int ac, char** av) {
 	// Declare the supported options.
@@ -25,7 +26,8 @@ po::variables_map parse_opts(int ac, char** av) {
 		("mem_config", po::value<std::string>()->default_value("mem-config.json"),"json file which holds the amount of memory each model+input uses")
 		("full_search", po::value<bool>()->default_value(false),"flag: conduct full search or not")
 		("proxy_config", po::value<std::string>()->default_value("proxy_config.json"),"json file which holds info input data")
-		("device_config", po::value<std::string>()->default_value("device-config.json"),"json file which holds per device type data");
+		("device_config", po::value<std::string>()->default_value("device-config.json"),"json file which holds per device type data")
+		("verbose,v", po::value<bool>()->default_value(false),"flag: enable verbose debug output");
 
 	po::variables_map vm;
 	po::store(po::parse_command_line(ac, av, desc), vm);
@@ -106,6 +108,7 @@ void writeSchedulingResults(std::string filename, SimState *simulator, Schedulin
 int main(int argc, char* argv[])
 {
 	po::variables_map vm = parse_opts(argc, argv);
+	VERBOSE_MODE = vm["verbose"].as<bool>();
 	std::vector<std::string> files={"1_28_28.txt", "3_224_224.txt", "3_300_300.txt"};
 	Scheduling::IncrementalScheduler  SBP;
 	bool success=  SBP.initializeScheduler(vm["sched_config"].as<std::string>(),\
@@ -202,7 +205,13 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 	best_sim = sim_list[0];
-	printResults(best_sim);
+	
+	// Print concise summary by default, verbose details only if --verbose
+	if(VERBOSE_MODE) {
+		printResults(best_sim);
+	} else {
+		printSchedulingSummary(best_sim);
+	}
 	//filters out scheduling attempts that requires too much bandwidth, defined in network_limit.h
 #ifdef CHECK_NETBW
 	/*

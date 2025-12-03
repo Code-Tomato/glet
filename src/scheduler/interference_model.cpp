@@ -49,11 +49,19 @@ void InterferenceModeling::InterferenceModel::_setup(std::string input_file1, st
 
 double InterferenceModeling::InterferenceModel::getInterference(std::string my_model, int my_batch, int my_partition, std::string your_model, int your_batch, int your_partition)
 {
+    // Normalize model names to match UTIL.CSV entries
     if (my_model == "lenet1" || my_model == "lenet2" || my_model == "lenet3" || my_model == "lenet4" || my_model == "lenet5" || my_model == "lenet6"){
             my_model="lenet";
     }
+    if (my_model == "ssd-mobilenetv1"){
+            my_model="ssd";
+    }
+    
     if(your_model == "lenet1" || your_model == "lenet2" || your_model == "lenet3" || your_model == "lenet4" || your_model == "lenet5" || your_model == "lenet6"){
             your_model="lenet";
+    }
+    if(your_model == "ssd-mobilenetv1"){
+            your_model="ssd";
     }
 
 	int my_batch_below=(int)exp2((int)log2(my_batch));
