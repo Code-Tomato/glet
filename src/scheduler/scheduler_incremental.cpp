@@ -1589,14 +1589,27 @@ bool IncrementalScheduler::mergeResidue(Task &task, SimState &input_sim){
 					temp_gpu_ptr->vNodeList.push_back(neighbor_node);
 					NodePtr temp_node_ptr= makeEmptyNode(neighbor_node->id,the_real_node->resource_pntg,the_real_node->type);
 					for(auto task_ptr : the_node->vTaskList) temp_node_ptr->vTaskList.push_back(task_ptr);
-
 					double interference = getInterference(device, task_ptr->id,task_ptr->batch_size,neighbor_node,temp_gpu_ptr);
+#ifdef SCHED_DEBUG
+					std::cout << "Interference of model " << getModelName(task_ptr->id) << " on " << neighbor_node->id << " is " << interference << std::endl;
+#endif
 					float duty_cycle = neighbor_node->duty_cycle;
-					float latency = pure_latency *(interference-1.0)+ getBatchLatency(getModelName(task_ptr->id),task_ptr->batch_size) + duty_cycle;
+					float latency = pure_latency *(interference-1.0)+ getBatchLatency(getModelName(task_ptr->id),task_ptr->batch_size);
+#ifdef SCHED_DEBUG
+					std::cout << "Latency of model " << getModelName(task_ptr->id) << " on " << neighbor_node->id << " is " << latency << std::endl;
+					std::cout << "SLO of model " << getModelName(task_ptr->id) << " on " << neighbor_node->id << " is " << task_ptr->SLO << std::endl;
+					std::cout << "Duty cycle of model " << getModelName(task_ptr->id) << " on " << neighbor_node->id << " is " << duty_cycle << std::endl;
+					std::cout << "Latency + Duty cycle of model " << getModelName(task_ptr->id) << " on " << neighbor_node->id << " is " << latency + duty_cycle << std::endl;
+					std::cout << "Pure Latency of model " << getModelName(task_ptr->id) << " on " << neighbor_node->id << " is " << pure_latency << std::endl;
+					std::cout << "Batch Latency of model " << getModelName(task_ptr->id) << " on " << neighbor_node->id << " is " << getBatchLatency(getModelName(task_ptr->id),task_ptr->batch_size) << std::endl;
+#endif
 					if(latency + duty_cycle> task_ptr->SLO) return true;
 
 				}
 			}
+#ifdef SCHED_DEBUG
+			std::cout << "PrintHere11" << std::endl;
+#endif
 			return false;
 		}
 
