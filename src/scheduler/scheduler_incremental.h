@@ -32,8 +32,8 @@ namespace Scheduling{
 			bool readjust(Task &task, std::vector<NodePtr> &given, SimState &decision); 
 			bool mergeResidue(Task &task, SimState &input_sim); 
 			bool allocateTimeShare(Task &task, SimState &sim, std::vector<NodePtr> &target_nodes);
-			int getMinPart(std::string device, Task task, const NodePtr node_ptr, int &residue_rate, int &result_batch); 
-			void estimateTrp(std::string device, Task &task, int rate, std::vector<NodePtr> &output_vec, const int MAX_PART);
+			int getMinPart(std::string device, Task task, const NodePtr node_ptr, double &residue_rate, int &result_batch); 
+			void estimateTrp(std::string device, Task &task, double rate, std::vector<NodePtr> &output_vec, const int MAX_PART);
 			float getMaxSaturateTrp(const Task &task, int &output_batch, const int resource_pntg, std::string type);
 			bool findBestFit(SimState &input_sim,NodePtr &input,std::vector<NodePtr> &exclude_vec ,NodePtr &output);
 			bool checkForInterference(std::string device, NodePtr the_node, NodePtr the_other_node, SimState &sim);

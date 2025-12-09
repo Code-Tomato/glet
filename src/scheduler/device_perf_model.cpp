@@ -13,6 +13,7 @@ int DevPerfModel::setup(std::string latency_info_file, std::string model_const_f
 	_latModel.setupTable(latency_info_file);
 	_intModel.setup(model_const_file,util_file);    
 	_devMem=dev_mem;
+	std::cout << "Completed setting up latency_prof_file, interference_const_file, interference_util_file and mem_mb." << std::endl;
 	return EXIT_SUCCESS;
 
 }
@@ -32,6 +33,10 @@ float DevPerfModel::getInterference(std::string my_model, int my_batch, int my_p
 
 int DevPerfModel::getDevMem(){
 	return  _devMem;
+}
+
+bool DevPerfModel::onlyHasBatch1(std::string model, int part){
+	return _latModel.onlyHasBatch1(model, part);
 }
 
 

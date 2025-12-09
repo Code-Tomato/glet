@@ -168,8 +168,9 @@ namespace Scheduling{
 // stores value for saturating throughput of each available partition
 	void IncrementalScheduler::initSaturateTrp(Task &task)
 	{
+		std::cout << "=======================================" << std::endl;
 #ifdef SCHED_DEBUG
-		std::cout << "[initSaturateTrp] Called for task  " << task.id << std::endl;
+		std::cout << "Running function: IncrementalScheduler::initSaturateTrp. Called for task " << task.id << std::endl;
 #endif
 		std::vector<SatTrpEntry> *new_table = new std::vector<SatTrpEntry>();
 		Node temp_node;
@@ -197,6 +198,8 @@ namespace Scheduling{
 					}
 				}
 				float latency = getLatency(type,task.id,batch_size,temp_node_ptr->resource_pntg);
+				// TRP calculation: latency is in milliseconds, so throughput = batch_size * 1000 ms/s / latency_ms
+				// Example: batch=1, latency=6277ms -> trp = 1 * 1000 / 6277 ≈ 0.159 req/s
 				float trp = batch_size * 1000.0 / latency;
 				SatTrpEntry new_entry;
 				new_entry.max_batch=batch_size;
@@ -212,10 +215,10 @@ namespace Scheduling{
 		_perModelSatTable[task.id]=new_table;
 	}
 
-	void IncrementalScheduler::estimateTrp(std::string device, Task &task, int rate, std::vector<NodePtr> &output_vec, const int MAX_PART){
+	void IncrementalScheduler::estimateTrp(std::string device, Task &task, double rate, std::vector<NodePtr> &output_vec, const int MAX_PART){
 		if(rate <=TRP_SLACK) return; // yes... if the rate is just too smaddll then return 
 #ifdef SCHED_DEBUG
-		printf("[estimateTrp] rate: %d called for model id: %d  \n",rate,task.id );
+		printf("[estimateTrp] rate: %f called for model id: %d  \n",rate,task.id );
 #endif 
 		int temp_batch;
 		int max_part;
@@ -258,9 +261,9 @@ namespace Scheduling{
 			temp_node_ptr->resource_pntg=min_part;
 			float latency = getLatency(device, task.id,max_batch,min_part);
 #ifdef SCHED_DEBUG
-			printf("[estimateTrp]residue node- latency: %lf, batch_size: %d, rate: %d, part: %d  \n", latency, max_batch, rate, min_part );
+			printf("[estimateTrp]residue node- latency: %lf, batch_size: %d, rate: %f, part: %d  \n", latency, max_batch, rate, min_part );
 #endif
-			temp_node_ptr->duty_cycle= std::max(max_batch * (float(1000.0)  / rate), latency);
+			temp_node_ptr->duty_cycle= std::max(max_batch * (1000.0  / rate), (double)latency);
 			temp_node_ptr->type = device;
 			float trp = (max_batch * 1000.0) / temp_node_ptr->duty_cycle;
 			TaskPtr temp_task_ptr = createNewTaskPtr(task.id,rate,task.SLO,max_batch,trp);
@@ -428,7 +431,7 @@ bool IncrementalScheduler::addModeltoSchedule(Task &task, SimState &decision){
 	// Time shares nodes, if ts_node_list is not empty this function will only consider nodes that are in the vector
 	bool IncrementalScheduler::allocateTimeShare(Task &task, SimState &sim, std::vector<NodePtr> &ts_node_list){
 #ifdef SCHED_DEBUG
-		printf("[allocateTimeShare] called for task id: %d , rate: %d \n",task.id, task.request_rate );
+		printf("[allocateTimeShare] called for task id: %d , rate: %f \n",task.id, task.request_rate );
 #endif
 		bool checkfirst=true;
 		if(ts_node_list.empty()) checkfirst=false;
@@ -468,7 +471,7 @@ bool IncrementalScheduler::addModeltoSchedule(Task &task, SimState &decision){
 #endif
 				int max_batch = int((node_ptr->duty_cycle) * (task.request_rate / 1000.0));
 #ifdef SCHED_DEBUG
-				printf("[allocateTimeShare] max batch: %d for duty cycle: %lf, rate: %d \n", max_batch,node_ptr->duty_cycle, task.request_rate);
+				printf("[allocateTimeShare] max batch: %d for duty cycle: %lf, rate: %f \n", max_batch,node_ptr->duty_cycle, task.request_rate);
 #endif 
 				if(max_batch==0) continue;
 
@@ -567,7 +570,7 @@ bool IncrementalScheduler::addModeltoSchedule(Task &task, SimState &decision){
 			} // for: candidates
 			if(!found) return EXIT_FAILURE; // faied to allocate with time sharing 
 #ifdef SCHED_DEBUG
-			printf("[allocateTimeShare] remaining rate: %d \n",task.request_rate);
+			printf("[allocateTimeShare] remaining rate: %f \n",task.request_rate);
 #endif
 		} // tsak.request_rate  
 		return EXIT_SUCCESS;
@@ -702,7 +705,7 @@ bool IncrementalScheduler::addModeltoSchedule(Task &task, SimState &decision){
 
 			return max_part;
 		}
-int IncrementalScheduler::getMinPart(std::string device, Task task, const NodePtr node_ptr, int &residue_rate ,int &result_batch){
+int IncrementalScheduler::getMinPart(std::string device, Task task, const NodePtr node_ptr, double &residue_rate ,int &result_batch){
 		int max_part = 200;
 		int given_pntg;
 		int given_id;
@@ -864,7 +867,7 @@ int IncrementalScheduler::getMinPart(std::string device, Task task, const NodePt
 				task.additional_rate=0;
 			}
 #ifdef SCHED_DEBUG
-			printf("[readjust] Called for task id : %d and rate %d \n", task.id, task.request_rate);
+			printf("[readjust] Called for task id : %d and rate %f \n", task.id, task.request_rate);
 #endif
 
 			// readjusted saturate scheduling
@@ -964,7 +967,7 @@ int IncrementalScheduler::getMinPart(std::string device, Task task, const NodePt
 						addGPUMemUsage(decision.vGPUList[temp_node_ptr->id],task.id, temp_node_ptr);
 #endif 
 #ifdef SCHED_DEBUG
-						printf("[readjust] allocatd saturate node to [%d,%d,%d], remaining rate: %d \n", temp_node_ptr->id, temp_node_ptr->resource_pntg, temp_node_ptr->dedup_num,task.request_rate);
+						printf("[readjust] allocatd saturate node to [%d,%d,%d], remaining rate: %f \n", temp_node_ptr->id, temp_node_ptr->resource_pntg, temp_node_ptr->dedup_num,task.request_rate);
 #endif
 					}
 				}
@@ -1060,7 +1063,7 @@ int IncrementalScheduler::getMinPart(std::string device, Task task, const NodePt
 							addGPUMemUsage(decision.vGPUList[temp_node_ptr->id],task.id,temp_node_ptr);
 #endif
 #ifdef SCHED_DEBUG
-							printf("[readjust] allocatd residue node, remaining rate: %d \n", task.request_rate);
+							printf("[readjust] allocatd residue node, remaining rate: %f \n", task.request_rate);
 #endif
 						} // if not revert
 					}// check mem limit
@@ -1259,7 +1262,7 @@ int IncrementalScheduler::getMinPart(std::string device, Task task, const NodePt
 					if(!isresidue){
 						input_ptr->duty_cycle = latency;
 					}
-					else input_ptr->duty_cycle = std::max((temp->batch_size * float(1000.0)) / temp->request_rate, latency);
+					else input_ptr->duty_cycle = std::max((temp->batch_size * double(1000.0)) / temp->request_rate, (double)latency);
 					temp->throughput=(temp->batch_size * 1000.0 ) / input_ptr->duty_cycle;
 					input_ptr->occupancy = latency / input_ptr->duty_cycle;
 				}
@@ -1298,7 +1301,7 @@ int IncrementalScheduler::getMinPart(std::string device, Task task, const NodePt
 				assert(best_fit_ptr->vTaskList.size() ==1); // there should be only one task
 				task.request_rate-=best_fit_ptr->vTaskList[0]->throughput;
 #ifdef SCHED_DEBUG
-				printf("[allocateFit] Allocated successfully!! remaining rate of task %d : %d \n", task.id, task.request_rate+task.additional_rate);
+				printf("[allocateFit] Allocated successfully!! remaining rate of task %d : %f \n", task.id, task.request_rate+task.additional_rate);
 #endif
 
 			}
@@ -1389,7 +1392,7 @@ bool IncrementalScheduler::mergeResidue(Task &task, SimState &input_sim){
 			std::cout << "[mergeResidue] request_rate: " << task.request_rate << ", additional rate: " << task.additional_rate << std::endl; 
 #endif
 			int residue_cnt = 0;
-			int request_rate = task.request_rate;
+			double request_rate = task.request_rate;
 			int dummy_batch;
 			float min_sat_trp = __FLT_MAX__;
 			std::pair<std::string, int> type_part_pair;

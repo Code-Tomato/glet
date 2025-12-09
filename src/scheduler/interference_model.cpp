@@ -18,9 +18,11 @@ void InterferenceModeling::InterferenceModel::_setup(std::string input_file1, st
 	std::string line;
 	std::string token;
 	//set mv_intModelConsts
+	std::cout << "Setting up INT_MODEL_CONSTANT.CSV" << std::endl;
 	std::ifstream infile1(input_file1);
 	std::getline(infile1, line); // skip first line
 	std::getline(infile1, line);
+	std::cout << line << std::endl;
 	std::istringstream ss2(line);
 	for(int i=0;i<5;i++){
 		std::getline(ss2, token, ',');
@@ -29,7 +31,9 @@ void InterferenceModeling::InterferenceModel::_setup(std::string input_file1, st
 	//set _utilInfo
 	std::ifstream infile2(input_file2);
 	std::getline(infile2, line);// skip first line
+	std::cout << "Setting up UTIL.CSV" << std::endl;
 	while(std::getline(infile2, line)){
+		std::cout << line << std::endl;
 		std::pair<std::string, int> model_batch;
 		std::vector<double> const_set;
 		std::istringstream ss(line);

@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  glet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: glet-dev
+    volumes:
+      # Mount the entire project directory
+      - .:/workspace
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    # Keep container running
+    command: /bin/bash

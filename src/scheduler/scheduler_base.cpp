@@ -7,15 +7,11 @@
 #include <algorithm>
 #include <glog/logging.h>
 
+#ifdef SCHED_DEBUG
+#include <iomanip>
+#endif
+
 namespace Scheduling{
-	/*
-	static uint64_t getCurNs(){
-		struct timespec ts; 
-		clock_gettime(CLOCK_REALTIME, &ts);
-		uint64_t t = ts.tv_sec * 1000 * 1000 * 1000 + ts.tv_nsec;
-		return t;
-	}
-	*/
 	BaseScheduler::BaseScheduler(){}
 	BaseScheduler::~BaseScheduler(){}
 	bool BaseScheduler::initializeScheduler(std::string sim_config_json_file, \
@@ -40,12 +36,15 @@ namespace Scheduling{
 
 		}
 		setupBatchLatencyTables(res_dir,batch_filenames);
+		std::cout << "\nScheduler has been initialized!!\n" << std::endl;
 		return true;
 	}
 
 	int BaseScheduler::setupScheduler(std::string sim_config_json_file){
 #ifdef SCHED_DEBUG
+		std::cout << "=======================================" << std::endl;
 		printf("Reading App JSON File: %s \n", sim_config_json_file.c_str());
+		std::cout << "Running function BaseScheduler::setupScheduler" << std::endl;
 #endif 
 		Json::Value root;
 		std::ifstream ifs; 
@@ -57,35 +56,49 @@ namespace Scheduling{
 			ifs.close();
 			return EXIT_FAILURE;
 		}
+		std::cout << "GPUs" << std::endl;
 
 		for(auto gpu : root["GPUs"]){
-			_typeToNumofTypeTable[gpu["Type"].asString()] = gpu["Num"].asInt();            
+			_typeToNumofTypeTable[gpu["Type"].asString()] = gpu["Num"].asInt();
+			std::cout << " - Type: " << gpu["Type"].asString() << ", Num: " << gpu["Num"].asInt() << std::endl;      
 		}
 		_numMaxModel = root["Max Model"].asInt();
+		std::cout << "Max Model: " << _numMaxModel << std::endl;
+
 		_usePart = root["Part"].asBool();
+		std::cout << "Part: " << _usePart << std::endl;
+
 		_latencyRatio = root["Latency Ratio"].asFloat();
+		std::cout << "Latency Ratio: " << _latencyRatio << std::endl;
+
 		_useInterference = root["Interference"].asBool();
+		std::cout << "Interference: " << _useInterference << std::endl;
+
 		_useIncremental=false;
 		if(root.isMember("Incremental")){
 			_useIncremental = root["Incremental"].asBool();
+			std::cout << "Incremental: " << _useIncremental << std::endl;
 		}
 		if(root.isMember("Self Tuning")){
 			_useSelfTuning = root["Self Tuning"].asBool();
+			std::cout << "Self Tuning: " << _useSelfTuning << std::endl;
 			_useInterference=false;
+			std::cout << "Warning, _useInterference set to false in Self Tuning" << std::endl;
 		}
-		std::cout <<"Reading "<< root["Avail_Parts"].size()<< " sizes" << std::endl; 
+		std::cout <<"Reading "<< root["Avail_Parts"].size()<< " sizes, ie Avail_Parts" << std::endl; 
 		for(unsigned int i=0; i < root["Avail_Parts"].size(); i++){
-			std::cout << "read part: " <<  root["Avail_Parts"][i].asInt() << std::endl;
+			std::cout << "Part " << i << std::endl;
+			std::cout << " - read part: " <<  root["Avail_Parts"][i].asInt() << std::endl;
 
 			if(find(_availParts.begin(), _availParts.end(),root["Avail_Parts"][i].asInt()) == _availParts.end()){
 				_availParts.push_back(root["Avail_Parts"][i].asInt());  
 #ifdef SCHED_DEBUG
-				std::cout << "pushed part: " <<  root["Avail_Parts"][i].asInt() << std::endl;
+				std::cout << " - pushed part: " <<  root["Avail_Parts"][i].asInt() << std::endl;
 #endif
 			}
 		}
 #ifdef SCHED_DEBUG
-		std::cout << "ended"  << std::endl;
+		std::cout << "Reading Avail_Parts Ended"  << std::endl;
 #endif
 		sort(_availParts.begin(),_availParts.end(),std::greater<int>());
 
@@ -96,8 +109,9 @@ namespace Scheduling{
 
 	int BaseScheduler::setupPerModelMemConfig(std::string mem_config_json_file){
 #ifdef SCHED_DEBUG
-		std::cout << __func__ << " called"
-			<< std::endl;
+		std::cout << "=======================================" << std::endl;
+		std::cout << "Running function BaseScheduler::setupPerModelMemConfig" << std::endl;
+		std::cout << __func__ << " called" << std::endl;
 #endif
 		Json::Value root;
 		std::ifstream ifs; 
@@ -109,14 +123,16 @@ namespace Scheduling{
 			ifs.close();
 			return EXIT_FAILURE;
 		}
+		std::cout << "Setting up the memory configuration for the models." << std::endl;
 		for(unsigned int i =0; i< root["models"].size(); i++)
 		{
 			std::string model_name = root["models"][i]["name"].asString();
 			int mem_size = root["models"][i]["mem"].asInt();
 			_mapModelIDtoMemSize[getModelID(model_name)]=mem_size;
 #ifdef SCHED_DEBUG
-			std::cout << __func__ << " model: " << model_name << " mem_size: " << _mapModelIDtoMemSize[getModelID(model_name)]
-				<< std::endl;
+		std::cout << std::left  << std::setw(30) << ("Model: " + model_name)
+				  << std::right << std::setw(10)  << _mapModelIDtoMemSize[getModelID(model_name)]
+				  << '\n';
 #endif
 
 		}
@@ -126,6 +142,8 @@ namespace Scheduling{
 
 	int BaseScheduler::setupDevicePerfModel(std::string device_config_json_file, std::string res_dir){
 #ifdef SCHED_DEBUG
+		std::cout << "=======================================" << std::endl;
+		std::cout << "Running function BaseScheduler::setupDevicePerfModel" << std::endl;
 		std::cout << __func__ << ": called for " << device_config_json_file << std::endl;
 #endif
 		Json::Value root;
@@ -156,6 +174,8 @@ namespace Scheduling{
 	}
 
 	void BaseScheduler::setupBatchLatencyTables(std::string res_dir, std::vector<std::string> &batch_filenames){
+		std::cout << "=======================================" << std::endl;
+		std::cout << "Setting up batch latency files" << std::endl;
 		for (auto it = batch_filenames.begin(); it != batch_filenames.end(); it ++){
 			std::map<int,float> *the_table;
 
@@ -182,6 +202,7 @@ namespace Scheduling{
 				std::cout << "failed to open " << *it << std::endl;
 				exit(1);
 			}
+			std::cout << filename << std::endl;
 			int batch;
 			float latency;
 			float variance; //for now we dont use variance 
@@ -216,7 +237,7 @@ namespace Scheduling{
 		return sum; 
 	}
 
-	int BaseScheduler::setMaxGPUs(int num_gpu){
+	void BaseScheduler::setMaxGPUs(int num_gpu){
 
 		_numMaxGPU=num_gpu;
 	}
@@ -241,92 +262,81 @@ namespace Scheduling{
 		return id;
 	}
 
- void BaseScheduler::setupTasks(std::string task_csv_file, std::vector<Task> *task_list){
-                std::string str_buf;
-                std::fstream fs;
-                fs.open(task_csv_file, std::ios::in);
+ 	void BaseScheduler::setupTasks(std::string task_csv_file, std::vector<Task> *task_list){
+		std::string str_buf;
+		std::fstream fs;
+		fs.open(task_csv_file, std::ios::in);
+		std::cout << "=======================================" << std::endl;
+		std::cout << "Setting up the models to schedule from " << task_csv_file << std::endl;
+		getline(fs, str_buf);
+		int num_of_task = stoi(str_buf);
+		std::cout << num_of_task << " model(s) to schedule." << std::endl;
+		for(int j=0;j<num_of_task;j++){
+			Task new_task;
 
-                getline(fs, str_buf);
-                int num_of_task = stoi(str_buf);
-                for(int j=0;j<num_of_task;j++)
-                {
-                        Task new_task;
+			getline(fs,str_buf,',');
+			new_task.id=stoi(str_buf);
 
-                        getline(fs,str_buf,',');
-                        new_task.id=stoi(str_buf);
-
-                        // Validate model ID to prevent segfaults
-                        if (new_task.id < 0 || new_task.id >= _IDtoModelName.size()) {
-                                std::cerr << "ERROR: Invalid model ID " << new_task.id 
-                                          << " in " << task_csv_file << " (line " << (j+2) << ")" << std::endl;
-                                std::cerr << "Valid model IDs: 0-" << (_IDtoModelName.size()-1) << std::endl;
-                                std::cerr << "Model mapping:" << std::endl;
-                                for(int i=0; i < _IDtoModelName.size(); i++) {
-                                        std::cerr << "  " << i << ": " << _IDtoModelName[i] << std::endl;
-                                }
-                                exit(EXIT_FAILURE);
-                        }
-
-                        getline(fs,str_buf,',');
-                        new_task.request_rate=stoi(str_buf);
+			// Validate model ID to prevent segfaults
+			if (new_task.id < 0 || new_task.id >= _IDtoModelName.size()) 
+			{
+				std::cerr << "\033[31m" << "ERROR: Invalid model ID " << new_task.id 
+						  << " in " << task_csv_file << " (line " << (j+2) << ")" << std::endl;
+				std::cerr << "Valid model IDs: 0-" << (_IDtoModelName.size()-1) << std::endl;
+				std::cerr << "Model mapping:" << std::endl;
+				for(int i=0; i < _IDtoModelName.size(); i++) 
+				{
+					std::cerr << "  " << i << ": " << _IDtoModelName[i] << std::endl;
+				}
+				exit(EXIT_FAILURE);
+			}
+			std::cout << _IDtoModelName[new_task.id] << " is being setup." << std::endl;
+			getline(fs,str_buf,',');
+			new_task.request_rate=stod(str_buf);
 #ifdef ADD_RATE
-								std::cout << "CHECKHERE: request rate: " << new_task.request_rate << std::endl;
-								std::cout << "adding rate" << std::endl;
-                        new_task.request_rate = return99P(new_task.request_rate);
-						std::cout << "added rate" << std::endl;
+			if (new_task.request_rate < 1.0)
+				new_task.request_rate = 1.0;
+
+			std::cout << " - Request rate: " << new_task.request_rate << "rps" << std::endl;
+			new_task.request_rate = return99P(new_task.request_rate);
 #endif
+			std::cout << " - Request rate (p99): " << new_task.request_rate << "rps" << std::endl;
+			getline(fs,str_buf,',');
+			new_task.SLO=stod(str_buf);
+			std::cout << " - SLO: " << new_task.SLO << "ms" << std::endl;
+			task_list->push_back(new_task);
+		}
+		fs.close();
+	}
 
-                        getline(fs,str_buf,',');
-                        new_task.SLO=stoi(str_buf);
+	void BaseScheduler::setupAvailParts(std::vector<int> input_parts){
+		assert(input_parts.size() >=1);
+		_availParts.clear();
 
-                        task_list->push_back(new_task);
-                }
-                fs.close();
-#ifdef SCHED_DEBUG
-                std::cout << "init_setup ------------------------------------------------" << std::endl;
-                std::cout << "task (name : [req, SLO])" << std::endl;
-                for(std::vector<Task>::iterator iter=task_list->begin(); iter != task_list->end(); ++iter)
-                {
-                        std::cout << iter->id << " : [" << iter->request_rate << ", " << iter->SLO << "]" << std::endl;
-                        iter->SLO= iter->SLO;
-                        std::cout << iter->id << "configured SLO: "<< iter->SLO <<std::endl;
-                }
-                std::cout << std::endl;
-#endif
-
-    }
-
-	 void BaseScheduler::setupAvailParts(std::vector<int> input_parts){
-                assert(input_parts.size() >=1);
-                _availParts.clear();
-
-                for(auto part : input_parts){
-                        if(part !=0) _availParts.push_back(part);
-                        int counter_part = 100-part;
-                        if(counter_part !=0){
-                                std::vector<int>::iterator it = find(_availParts.begin(), _availParts.end(),counter_part);
-                                if(it == _availParts.end()){
-                                        _availParts.push_back(counter_part);
-                                }
-                        }
-                }
-                // sort in descneding order
-                sort(_availParts.begin(),_availParts.end(),std::greater<int>());
-        }
-
-
-
+		for(auto part : input_parts){
+			if(part !=0) _availParts.push_back(part);
+			int counter_part = 100-part;
+			if(counter_part !=0){
+				std::vector<int>::iterator it = find(_availParts.begin(), _availParts.end(),counter_part);
+				if(it == _availParts.end()){
+					_availParts.push_back(counter_part);
+				}
+			}
+		}
+		// sort in descneding order
+		sort(_availParts.begin(),_availParts.end(),std::greater<int>());
+	}
 
 	void BaseScheduler::initiateDevs(SimState &input, int nDevs){
-#ifdef SCALE_DEBUG
-		std::cout << __func__ << " initiating " << nDevs << " GPUs for simulator" << std::endl;
-#endif
+		std::cout << "=======================================" << std::endl;
+		std::cout << "Running function: BaseScheduler::initiateDevs initiating " << nDevs << " GPUs for simulator" << std::endl;
 		input.vGPUList.clear();
 		int idx=0;
 		for(auto type : _typeToNumofTypeTable){
 			std::string gpu_type = type.first ;
 			int num_of_gpu = type.second;
 			for(int i=0; i < num_of_gpu; i++){
+				std::cout << gpu_type << " with id " << i << std::endl;
 				GPU new_gpu;
 				GPUPtr new_gpu_ptr=std::make_shared<GPU>(new_gpu);
 				new_gpu_ptr->GPUID=idx;
@@ -360,7 +370,7 @@ namespace Scheduling{
 			for(int i=0; i <ndevs; i++){
 				initDevMem(input.vGPUList[idx], _nametoDevPerfModelTable[type].getDevMem()); 
 #ifdef SCHED_DEBUG
-				std::cout<< __func__ << ": "<< "dev" << idx << " will be setted up as " << _nametoDevPerfModelTable[type].getDevMem() << "MBs" << std::endl;
+				std::cout<< __func__ << ": "<< "dev" << idx << " will be setted up as " << _nametoDevPerfModelTable[type].getDevMem() << "MBs with type " << type << std::endl;
 #endif
 				idx++;
 				if(idx>=total_devs) return;
@@ -382,7 +392,6 @@ namespace Scheduling{
 #endif
 		}
 	}
-
 	
 	float BaseScheduler::getInterference(std::string device, int a_id, int b_id, int a_batch, int b_batch,int partition_a, int partitoin_b){
 		assert(!device.empty());
@@ -410,9 +419,9 @@ namespace Scheduling{
 		assert(!device.empty());
 		assert(1<= batch && batch <= _MAX_BATCH);
 		float latency = _nametoDevPerfModelTable[device].getLatency(_IDtoModelName[model_num], batch, part);
+		latency *= (100.0 / part);
 		if(_useBatchingOverhead) latency += getBatchLatency(_IDtoModelName[model_num],batch);
-		float lat_ratio=_latencyRatio;
-		return latency* lat_ratio;
+		return latency * _latencyRatio;
 	}
 
 	float BaseScheduler::getLatency(std::string device, const int model_num, const int batch, const NodePtr self_node, SimState &input){
@@ -517,7 +526,6 @@ namespace Scheduling{
 #ifdef SCHED_DEBUG
 				printf("latency: %lf ms, new_batch_size: %d ,new_duty_cycle: %lf ms \n", latency, new_batch_size, new_duty_cycle);
 #endif 
-
 			}
 			min_duty_cycles.push_back(new_duty_cycle);
 			new_batches.push_back(new_batch_size);
@@ -540,7 +548,7 @@ namespace Scheduling{
 		return EXIT_SUCCESS;
 	}
 
-void BaseScheduler::fillReservedNodes(SimState &input){
+	void BaseScheduler::fillReservedNodes(SimState &input){
 		// check how partitioned each GPU are
 		for(auto gpu_ptr : input.vGPUList){
 			int assigned_part =0;
@@ -613,7 +621,7 @@ void BaseScheduler::fillReservedNodes(SimState &input){
 	}
 
 	
-	int BaseScheduler::getMaxBatch(Task &self_task, const NodePtr &self_node, SimState &input, int &req, const bool is_residue, bool interference){
+	int BaseScheduler::getMaxBatch(Task &self_task, const NodePtr &self_node, SimState &input, double &req, const bool is_residue, bool interference){
 #ifdef SCHED_DEBUG
 		printNodeInfo(self_node);
 #endif
@@ -623,17 +631,41 @@ void BaseScheduler::fillReservedNodes(SimState &input){
 		int starting_point, under_limit;
 		float latency;
 		int model_num=self_task.id;
-		int SLO = self_task.SLO;
-#ifdef SCHED_DEBUG
-		std::cout << __func__ << ": called for task id: " << model_num << "and SLO:  " << SLO << std::endl; 
+		double SLO = self_task.SLO;
+		
+		// Get model name early
+		std::string model_name = _IDtoModelName[model_num];
+		std::cout << __func__ << ": called for task id: " << model_num << " (" << model_name << ") and SLO: " << SLO << std::endl;
+		
+		// Explicitly clamp diffusion models and GPT to batch=1 (they are latency-dominated, not throughput-dominated)
+		if (model_name.find("diffusion") != std::string::npos || model_name == "gpt") {
+			std::cout << "[getMaxBatch] Model " << model_name << " is clamped to batch=1 (latency-dominated model)" << std::endl;
+			ret_batch = 1;
+			return ret_batch;
+		}
+		
 		if(is_residue){
-			std::cout << __func__ << ": for residue rate : " << req << std::endl; 
+			std::cout << __func__ << ": for residue rate: " << req << std::endl; 
 		}
 		else{
 			std::cout << __func__ << ": for saturated rate " << std::endl; 
 
 		}
-#endif
+
+		// Check if this model only supports batch=1 (e.g., other models that may only have batch=1 entries)
+		std::string device_type = self_node->type;
+		if (!device_type.empty()) {
+			auto it = _nametoDevPerfModelTable.find(device_type);
+			if (it != _nametoDevPerfModelTable.end() &&
+				it->second.onlyHasBatch1(model_name, self_node->resource_pntg)) {
+				std::cout << "[getMaxBatch] Model " << model_name
+								<< " only supports batch=1, clamping to 1" << std::endl;
+				ret_batch = 1;
+				return ret_batch;
+			}
+		}
+
+
 		int low_batch=1;
 		int high_batch=_MAX_BATCH;
 		bool check_and_exit=false;
@@ -644,6 +676,10 @@ void BaseScheduler::fillReservedNodes(SimState &input){
 				check_last=true;
 			}
 			int mid_batch = floor((high_batch + low_batch)/2);
+			std::cout << "[getMaxBatch] debug: model " << model_num
+              		  << ", part " << self_node->resource_pntg
+              		  << ", trying batch " << mid_batch << std::endl;
+
 			if(interference)
 				latency = getLatency(self_node->type,model_num,mid_batch,self_node, input);
 			else
@@ -686,9 +722,7 @@ void BaseScheduler::fillReservedNodes(SimState &input){
 				}
 			}
 		}
-#ifdef SCHED_DEBUG
 		std::cout << "[getMaxBatch] original ret_batch is " << ret_batch << std::endl;
-#endif
 		// corner checking small request rates
 		if(ret_batch == 0 && is_residue){
 #ifdef SCHED_DEBUG
@@ -703,21 +737,18 @@ void BaseScheduler::fillReservedNodes(SimState &input){
 				ret_batch=1;
 				succeed=true;
 #ifdef SCHED_DEBUG
-				printf("[getMaxBatch] model %s: changed request rate to %d req/s,  with resource partition: %d\n", _IDtoModelName[model_num].c_str(),req, self_node->resource_pntg);
+				printf("[getMaxBatch] model %s: changed request rate to %f req/s,  with resource partition: %d\n", _IDtoModelName[model_num].c_str(),req, self_node->resource_pntg);
 #endif
-
 			}
 			if(!succeed){
 #ifdef SCHED_DEBUG
-				printf("[getMaxBatch] model %s: not possible to satisfy SLO %d ms, request rate: %d req/s,  with resource partition: %d\n", _IDtoModelName[model_num].c_str(),SLO,req, self_node->resource_pntg);
+				printf("[getMaxBatch] model %s: not possible to satisfy SLO %d ms, request rate: %f req/s,  with resource partition: %d\n", _IDtoModelName[model_num].c_str(),SLO,req, self_node->resource_pntg);
 #endif
 				return 0;
 			}
 		}
-#ifdef SCHED_DEBUG
 		std::cout << __func__ << ": returning max_batch: " << ret_batch << std::endl; 
 
-#endif
 		return ret_batch;
 	}
 
@@ -760,7 +791,7 @@ void BaseScheduler::fillReservedNodes(SimState &input){
 		TaskPtr task_ptr=node_ptr->vTaskList[0];
 		float latency = getLatency(node_ptr->type,task_ptr->id,task_ptr->batch_size,node_ptr,simulator);
 #ifdef SCHED_DEBUG
-		printf("[ajustSatNode]  task: %d, latency: %lf SLO: %d \n", task_ptr->id, latency, task_ptr->SLO);
+		printf("[ajustSatNode]  task: %d, latency: %lf SLO: %f \n", task_ptr->id, latency, task_ptr->SLO);
 
 #endif
 
@@ -848,53 +879,59 @@ void BaseScheduler::fillReservedNodes(SimState &input){
 		return EXIT_FAILURE;
 	}
 
-		int BaseScheduler::return99P(const int mean){
+	double BaseScheduler::return99P(const double mean){
 		//added for fast returning values that might take too long
 		// based on calculation value of 550: 10.02%
-		std::cout << "received: " << mean << std::endl;
+		std::cout << " - Running return99P of: " << mean << std::endl;
 		
 		// Handle edge cases for very small or very large means
-		if(mean <= 0) {
-			std::cout << "returning new_mean: 1 (mean too small)" << std::endl;
-			return 1;
+		if(mean <= 0){
+			std::cerr << "\033[31m" << "The mean is negative or 0" << "\033[0m" << std::endl;
+			exit(EXIT_FAILURE);
 		}
-		if(mean > 550) {
-			int result = mean * 1.1;
-			std::cout << "returning new_mean: " << result << " (mean > 550)" << std::endl;
-			return result;
-		}
-		
-		double prob_sum=0.0;
-		int new_mean=1;
-		int max_iterations = mean * 3 + 100;  // Prevent infinite loops
-		int iterations = 0;
-		
-		do{ 
-			double prob=calcPoissProb(new_mean,mean);
-			prob_sum+=prob;
-			new_mean++;
-			iterations++;
-			
-			// Safety check to prevent freezing
-			if(iterations > max_iterations) {
-				std::cerr << "WARNING: Poisson calculation exceeded max iterations for mean=" << mean << std::endl;
-				std::cerr << "  Using approximation: mean * 1.5" << std::endl;
-				new_mean = mean * 1.5;
-				break;
+
+		constexpr double target = 0.99;
+		constexpr double normal_threshold = 50.0;   // switch to normal approx above this
+
+		// ---- Region 1: small/moderate means → exact Poisson CDF ----
+		if (mean < normal_threshold) {
+			// Compute the smallest k such that P(X ≤ k) ≥ 0.99, X ~ Poisson(mean)
+			int k = 0;
+			double p = std::exp(-mean);  // P(X = 0)
+			double cdf = p;
+
+			// Safety cap on iterations (should basically never hit)
+			int max_k = static_cast<int>(mean * 5.0 + 50.0);
+
+			while (cdf < target) {
+				++k;
+				// Recurrence: P(X = k) = P(X = k-1) * (mean / k)
+				p *= mean / static_cast<double>(k);
+				cdf += p;
+
+				if (k > max_k) {
+					std::cerr << "\033[31m"
+							<< "WARNING: Poisson CDF loop exceeded max_k for mean="
+							<< mean
+							<< ", falling back to normal approximation."
+							<< "\033[0m" << std::endl;
+					break;
+				}
 			}
-		}while(prob_sum < 0.99 );
-		std::cout << "returning new_mean: "<< new_mean << std::endl; 
-		return new_mean;
-	}
 
-	double BaseScheduler::calcPoissProb(int actual, int mean){
-		double t1 = exp(-mean);
-		for(int i =0; i< actual; i++){
-			t1 *=double(mean);
-			t1 /=(i+1);  //check how much leftover requests were  
+			std::cout << " - returning p99 (exact): " << k << std::endl;
+			return static_cast<double>(k);
+		}
 
-		}   
-		return t1; 
+		// ---- Region 2: large means → Normal approximation ----
+		// X ~ Poisson(mean) ≈ N(mean, mean)
+		// p99 ≈ mean + z_0.99 * sqrt(mean)
+		constexpr double z99 = 2.3263478740408408;  // 99th percentile of N(0,1)
+
+		double q = mean + z99 * std::sqrt(mean) + 0.5;  // +0.5 continuity correction
+
+		std::cout << " - returning p99 (normal approx): " << q << std::endl;
+		return q;
 	}
 
 	// reset input according to node sizes vector
@@ -927,7 +964,7 @@ void BaseScheduler::fillReservedNodes(SimState &input){
 			}
 		}
 #ifdef SCHED_DEBUG
-	printResults(input);
+		printResults(input);
 #endif
 		return;
 	}
@@ -938,8 +975,5 @@ void BaseScheduler::fillReservedNodes(SimState &input){
 			<< "GPUID: " << node->id <<", "
 			<< "type: " << node->type << std::endl;
 	}
-
-
-
 
 } // Scheduling

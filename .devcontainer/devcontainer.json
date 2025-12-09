@@ -1,0 +1,34 @@
+{
+	"name": "Glet Development",
+	"dockerComposeFile": "../docker-compose.yml",
+	"service": "glet",
+	"workspaceFolder": "/workspace",
+	
+	// Features to add to the dev container
+	"features": {},
+	
+	// Configure tool-specific properties
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.cpptools",
+				"ms-vscode.cmake-tools",
+				"twxs.cmake"
+			],
+			"settings": {
+				"files.eol": "\n",
+				"editor.formatOnSave": false,
+				"C_Cpp.default.includePath": [
+					"${workspaceFolder}/src/common",
+					"${workspaceFolder}/src/scheduler"
+				]
+			}
+		}
+	},
+	
+	// Use 'forwardPorts' to make a list of ports inside the container available locally
+	// "forwardPorts": [],
+	
+	// Comment out to connect as root instead
+	"remoteUser": "root"
+}

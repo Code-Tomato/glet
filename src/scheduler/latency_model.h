@@ -21,6 +21,7 @@ class LatencyModel {
         float getGPURatio(std::string model, int batch, int part);
         int makeKey(int batch, int part);
         Entry* parseKey(int key);
+	bool onlyHasBatch1(std::string model, int part);
 	private:
         float getBatchPartInterpolatedLatency(std::string model, int batch, int part);
         float getBatchInterpolatedLatency(std::string model, int batch, int part);

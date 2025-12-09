@@ -12,10 +12,10 @@
 typedef struct _Task
 {
   int id; 
-  int request_rate; // mutable rate, will be chnged during scheduling
+  double request_rate; // mutable rate, will be chnged during scheduling
   int ORG_RATE; // the original rate, 
-  int additional_rate; // additional rate due to interference, only used during scheduling
-  int SLO;
+  double additional_rate; // additional rate due to interference, only used during scheduling
+  double SLO;
   int batch_size;
   float throughput;
 } Task;
@@ -89,7 +89,7 @@ class BaseScheduler {
 		bool getUseParts();
 		std::vector<int> getAvailParts();
 		int getMaxGPUs();
-		int setMaxGPUs(int num_gpu);
+		void setMaxGPUs(int num_gpu);
 		int getMaxBatchSize();
 		int getModelMemUSsage(int model_id);
 		std::string getModelName(int id);
@@ -117,10 +117,9 @@ class BaseScheduler {
 		float getInterference(std::string device, int a_id, int b_id, int a_batch, int b_batch, int partition_a, int partitoin_b);
 		float getInterference(std::string device, int model_id, int batch_size, NodePtr node_ptr, GPUPtr gpu_ptr);
 		float getBatchLatency(std::string modelname, int batch);
-		int getMaxBatch(Task &self_task, const NodePtr &self_node, SimState &input, int &req, bool is_residue, bool interference);
+		int getMaxBatch(Task &self_task, const NodePtr &self_node, SimState &input, double &req, bool is_residue, bool interference);
 		// return 99%ile of Poisson CDF for given rate
-		int return99P(const int mean);
-		double calcPoissProb(int actual, int mean);
+		double return99P(const double mean);
 		void printNodeInfo(const NodePtr &node);
 
 		bool _useBatchingOverhead = 1;

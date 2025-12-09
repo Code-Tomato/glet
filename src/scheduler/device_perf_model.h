@@ -14,6 +14,7 @@ class DevPerfModel{
 		float getGPURatio(std::string model, int batch, int part);
 		float getInterference(std::string my_model, int my_batch, int my_partition, std::string your_model, int your_batch, int your_partition);
 		int getDevMem();
+		bool onlyHasBatch1(std::string model, int part);
 	private:
 		int _devMem;
 		InterferenceModeling::InterferenceModel _intModel;

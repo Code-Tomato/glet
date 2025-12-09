@@ -24,10 +24,10 @@ po::variables_map parse_opts(int ac, char** av) {
 		("sched_config", po::value<std::string>()->default_value("sim_config.json"),"json file which hold scheduling configurations")
 		("output", po::value<std::string>()->default_value("ModelList.txt"),"txt file which hold scheduling results")
 		("mem_config", po::value<std::string>()->default_value("mem-config.json"),"json file which holds the amount of memory each model+input uses")
-		("full_search", po::value<bool>()->default_value(false),"flag: conduct full search or not")
+		("full_search", po::bool_switch(),"flag: conduct full search or not")
 		("proxy_config", po::value<std::string>()->default_value("proxy_config.json"),"json file which holds info input data")
 		("device_config", po::value<std::string>()->default_value("device-config.json"),"json file which holds per device type data")
-		("verbose,v", po::value<bool>()->default_value(false),"flag: enable verbose debug output");
+		("verbose,v", po::bool_switch(),"flag: enable verbose debug output");
 
 	po::variables_map vm;
 	po::store(po::parse_command_line(ac, av, desc), vm);
@@ -124,11 +124,9 @@ int main(int argc, char* argv[])
 	SBP.setupNetworkChecker(vm["resource_dir"].as<std::string>()+"/"+vm["proxy_config"].as<std::string>());
 #endif
 	std::vector<Task> task_list;
-	if(SBP.getUseParts()) AVAIL_PARTS={50,60,80,100}; // other part will be 100-20, 100-40, 100-50 and so on
-	//if(SBP.GetUseParts()) AVAIL_PARTS={50,}; // other part will be 100-20, 100-40, 100-50 and so on
+	if(SBP.getUseParts()) AVAIL_PARTS={14,29,43,57,100}; 
 
-
-	else AVAIL_PARTS={100}; // other part will be 100-20, 100-40, 100-50 and so on
+	else AVAIL_PARTS={100};
 	SimState simulator;
 	SimState final_output;
 	SBP.setupAvailParts(AVAIL_PARTS);

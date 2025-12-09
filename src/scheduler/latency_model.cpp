@@ -14,10 +14,14 @@ void LatencyModel::setupTable(std::string TableFile){
     std::string str_buf;
     std::ifstream file(TableFile);
     std::string line;
-    #ifdef DEBUG
+#ifdef DEBUG
     std::cout << __func__ << " called for " << TableFile << std::endl;
-    #endif
+    std::cout << "Setting up the latency file" << std::endl;
+#endif
     while(std::getline(file, line)){
+#ifdef DEBUG
+        std::cout << line << std::endl;
+#endif
         std::istringstream iss(line);
         std::string field;
         Entry new_entry;
@@ -54,37 +58,53 @@ Entry* LatencyModel::parseKey(int key){
 }
 
 
-std::pair<int,int> findBatchpair(std::vector<int> &list, int batch, int part)
+std::pair<int,int> findBatchpair(const std::vector<int> &list, int batch)
 {
-    assert(MIN_BATCH < batch && batch < MAX_BATCH);
-    std::pair<int,int> retPair;
-    std::vector<int>::iterator it;
-    int lowerbatch = batch;
-    while(true){
-        it=find(list.begin(), list.end(), lowerbatch);
-        if(it !=list.end()) {
-           retPair.first=lowerbatch;
-           break;
+    // Handle edge case: if list only contains batch=1, return {1, 1} for batch=1
+    if (list.size() == 1 && list[0] == 1) {
+        if (batch == 1) {
+            return std::make_pair(1, 1);
         }
-        lowerbatch--;
+        // If batch > 1 but only batch=1 exists, return {1, -1} to indicate no upper bound
+        return std::make_pair(1, -1);
     }
-    int upperbatch = batch;
-    while(true){
-        upperbatch++;
-        it=find(list.begin(), list.end(), upperbatch);
-        if(it !=list.end()) {
-           retPair.second=upperbatch;
-           break;
+
+    // If batch is at boundaries and exists in list, return it directly
+    if (batch == MIN_BATCH || batch == MAX_BATCH) {
+        if (std::find(list.begin(), list.end(), batch) != list.end()) {
+            return std::make_pair(batch, batch);
         }
     }
+
+    std::pair<int,int> retPair{-1,-1};
+
+    // find lower neighbor
+    int lower = batch;
+    while(lower >= MIN_BATCH) {
+        if(std::find(list.begin(), list.end(), lower) != list.end()) {
+            retPair.first = lower;
+            break;
+        }
+        lower--;
+    }
+
+    // find upper neighbor
+    int upper = batch;
+    while(upper <= MAX_BATCH) {
+        if(std::find(list.begin(), list.end(), upper) != list.end()) {
+            retPair.second = upper;
+            break;
+        }
+        upper++;
+    }
+
     return retPair;
 }
 
 
  float LatencyModel::getBatchPartInterpolatedLatency(std::string model, int batch, int part){
-     std::vector<int> keys_vec;
-    for(std::unordered_map<int,float>::iterator it = _perModelLatnecyTable[model]->begin();
-        it != _perModelLatnecyTable[model]->end();it++ )
+    std::vector<int> keys_vec;
+    for(std::unordered_map<int,float>::iterator it = _perModelLatnecyTable[model]->begin(); it != _perModelLatnecyTable[model]->end();it++ )
     {
         keys_vec.push_back(it->first);
     }
@@ -116,13 +136,42 @@ std::pair<int,int> findBatchpair(std::vector<int> &list, int batch, int part)
     if(batch == MIN_BATCH || batch == MAX_BATCH){
         return _perModelLatnecyTable[model]->operator[](makeKey(batch,part));
     } 
+    
+    // Check if only batch=1 exists for this model/partition
+    if (onlyHasBatch1(model, part)) {
+        // If requesting batch=1, return it directly
+        if (batch == 1) {
+            return _perModelLatnecyTable[model]->operator[](makeKey(1, part));
+        }
+        // If requesting batch > 1 but only batch=1 exists, return batch=1 latency
+        // This prevents crashes but indicates the model doesn't support larger batches
+        return _perModelLatnecyTable[model]->operator[](makeKey(1, part));
+    }
+    
     // if not, do interpolation
-    std::pair<int,int> two_batch = findBatchpair(_perModelBatchVec[model][part], batch, part);
+    std::pair<int,int> two_batch = findBatchpair(_perModelBatchVec[model][part], batch);
 
     int b1 = two_batch.first;
     int b2 = two_batch.second;
+    
+    // Handle case where we couldn't find neighbors (shouldn't happen after above check, but be safe)
+    if (b1 == -1 || b2 == -1) {
+        // Fallback: if we have batch=1, use it
+        if (std::find(_perModelBatchVec[model][part].begin(), _perModelBatchVec[model][part].end(), 1) != _perModelBatchVec[model][part].end()) {
+            return _perModelLatnecyTable[model]->operator[](makeKey(1, part));
+        }
+        // This should not happen, but return 0.0 as error indicator
+        return 0.0;
+    }
+    
     float l1=_perModelLatnecyTable[model]->operator[](makeKey(b1,part));
     float l2=_perModelLatnecyTable[model]->operator[](makeKey(b2,part));
+    
+    // Handle case where batch pair is the same (e.g., {1, 1})
+    if (b1 == b2) {
+        return l1;
+    }
+    
     assert(l1 != 0.0 && l2 != 0.0);
     float ret_latency = (l2-l1)/float(b2-b1) * (batch-b1) + l1;
     return ret_latency;
@@ -130,14 +179,7 @@ std::pair<int,int> findBatchpair(std::vector<int> &list, int batch, int part)
 
 float LatencyModel::getLatency(std::string model, int batch, int part){
     assert(MIN_BATCH <= batch && batch <= MAX_BATCH);
-    // Normalize model names to match latency.csv entries
-    if (model == "lenet1" || model == "lenet2" || model == "lenet3" \
-    || model == "lenet4" || model == "lenet5" || model=="lenet6"){
-        model="lenet1";
-    }
-    if (model == "ssd-mobilenetv1"){
-        model="ssd";
-    }
+    
     // if not found, return 0
     if (_perModelLatnecyTable.find(model) == _perModelLatnecyTable.end())
     {
@@ -170,14 +212,64 @@ float LatencyModel::getGPURatio(std::string model, int batch, int part){
     if(batch == MIN_BATCH || batch == MAX_BATCH){
         return _perModelGPURatioTable[model]->operator[](makeKey(batch,part));
     } 
+    
+    // Check if only batch=1 exists for this model/partition
+    if (onlyHasBatch1(model, part)) {
+        // If requesting batch=1, return it directly
+        if (batch == 1) {
+            return _perModelGPURatioTable[model]->operator[](makeKey(1, part));
+        }
+        // If requesting batch > 1 but only batch=1 exists, return batch=1 ratio
+        return _perModelGPURatioTable[model]->operator[](makeKey(1, part));
+    }
+    
     // if not, do interpolation
-    std::pair<int,int> two_batch = findBatchpair(_perModelBatchVec[model][part], batch, part);
+    std::pair<int,int> two_batch = findBatchpair(_perModelBatchVec[model][part], batch);
     int b1 = two_batch.first;
     int b2 = two_batch.second;
+    
+    // Handle case where we couldn't find neighbors
+    if (b1 == -1 || b2 == -1) {
+        // Fallback: if we have batch=1, use it
+        if (std::find(_perModelBatchVec[model][part].begin(), _perModelBatchVec[model][part].end(), 1) != _perModelBatchVec[model][part].end()) {
+            return _perModelGPURatioTable[model]->operator[](makeKey(1, part));
+        }
+        // This should not happen, but return 0.0 as error indicator
+        return 0.0;
+    }
+    
     float g1=_perModelGPURatioTable[model]->operator[](makeKey(b1,part));
     float g2=_perModelGPURatioTable[model]->operator[](makeKey(b2,part));
+    
+    // Handle case where batch pair is the same (e.g., {1, 1})
+    if (b1 == b2) {
+        return g1;
+    }
+    
     assert(g1 != 0.0 && g2 != 0.0);
     //2. do linear interpolation and return;
     float ret_gpu_ratio = (g2-g1)/float(b2-b1) * (batch-b1) + g1;
     return ret_gpu_ratio;
+}
+
+bool LatencyModel::onlyHasBatch1(std::string model, int part){
+    // Check if model exists in the table
+    if (_perModelLatnecyTable.find(model) == _perModelLatnecyTable.end()) {
+        return false;
+    }
+    
+    // Check if this partition exists for this model
+    if (_perModelBatchVec.find(model) == _perModelBatchVec.end()) {
+        return false;
+    }
+    
+    if (_perModelBatchVec[model].find(part) == _perModelBatchVec[model].end()) {
+        return false;
+    }
+    
+    // Get the batch vector for this model and partition
+    const std::vector<int>& batch_vec = _perModelBatchVec[model][part];
+    
+    // Check if it only contains batch=1
+    return (batch_vec.size() == 1 && batch_vec[0] == 1);
 }

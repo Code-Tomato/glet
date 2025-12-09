@@ -1,0 +1,35 @@
+# Build artifacts
+bin/
+build/
+CMakeFiles/
+cmake_install.cmake
+CMakeCache.txt
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+*log*
+
+# Compiled files
+*.o
+*.so
+*.a
+*.exe
+*.out
+
+# Temporary files
+*.tmp
+*.bak

@@ -1,14 +1,13 @@
 {
-	"GPUs":[
-	{
-		"Type":"a100",
-		"Num": 50
-	}],
-        "Max Model": 0,
-        "Part": 1,
-        "SLO Ratio":1.0,
-        "Latency Ratio":1.1,
-        "Interference": 1,
-        "Avail_Parts":[14,29,43,57,100],
-        "Incremental": 1
+    "GPUs":[{
+        "Type": "a100",
+        "Num": 5
+    }],
+    "Max Model": 2,
+    "Part": true,
+    "SLO Ratio":1.0,
+    "Latency Ratio": 1.1,
+    "Interference": true,
+    "Avail_Parts": [14,29,43,57,100],
+    "Incremental": true
 }
