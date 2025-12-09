@@ -2,21 +2,21 @@
 #
 # GPU Scheduler Wrapper Script
 #
-# Simplified interface for running the standalone scheduler with common configurations.
-# Automatically generates sched-config.json based on parameters.
+# Simplified interface for running the standalone scheduler.
+# Uses sched-config.json from the resource directory.
 #
 
 set -e
 
+# Get script directory for relative path resolution
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+
 # Default values
-RESOURCE_DIR="../resource"
+RESOURCE_DIR="$PROJECT_ROOT/resource"
 TASK_CONFIG=""
 OUTPUT_FILE=""
-GPUS=7
-PARTS="14,29,43,57,100"
-INTERFERENCE=0
 VERBOSE=false
-GPU_TYPE="a100"
 
 # Usage function
 usage() {
@@ -25,21 +25,14 @@ usage() {
     echo "Options:"
     echo "  -t, --task-config FILE    Task configuration CSV file (required)"
     echo "  -o, --output FILE         Output file (default: based on task config)"
-    echo "  -g, --gpus N              Number of GPUs (default: 7)"
-    echo "  -p, --parts LIST          Partition percentages (default: 14,29,43,57,100)"
-    echo "  -i, --interference        Enable interference modeling (default: disabled)"
     echo "  -v, --verbose             Enable verbose output"
-    echo "  --gpu-type TYPE           GPU type (default: 3080)"
-    echo "  --resource-dir DIR        Resource directory (default: ../resource)"
+    echo "  --resource-dir DIR        Resource directory (default: resource/)"
     echo "  -h, --help                Show this help"
     echo ""
     echo "Examples:"
-    echo "  $0 -t 3-model-config.csv -g 2"
-    echo "  $0 -t 10-model-config.csv -g 7 -p 50,100 -i"
-    echo "  $0 -t 5-model-config.csv -g 5 -v"
-    echo ""
-    echo "Valid GPU types: a100"
-    echo "Valid partitions: 14,29,43,57,100"
+    echo "  $0 -t ../resource/SUS-GPUS_INPUT.CSV"
+    echo "  $0 -t ../resource/test.CSV -v"
+    echo "  $0 -t tasks.csv -o results.txt"
 }
 
 # Parse command line arguments
@@ -53,25 +46,9 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_FILE="$2"
             shift 2
             ;;
-        -g|--gpus)
-            GPUS="$2"
-            shift 2
-            ;;
-        -p|--parts)
-            PARTS="$2"
-            shift 2
-            ;;
-        -i|--interference)
-            INTERFERENCE=1
-            shift
-            ;;
         -v|--verbose)
             VERBOSE=true
             shift
-            ;;
-        --gpu-type)
-            GPU_TYPE="$2"
-            shift 2
             ;;
         --resource-dir)
             RESOURCE_DIR="$2"
@@ -102,9 +79,12 @@ if [[ ! -f "$TASK_CONFIG" ]]; then
     exit 1
 fi
 
-# Validate GPU type
-if [[ "$GPU_TYPE" != "a100" ]]; then
-    echo "ERROR: Invalid GPU type: $GPU_TYPE (valid: a100)"
+# Set sched-config to use resource directory file
+SCHED_CONFIG="$RESOURCE_DIR/sched-config.json"
+
+# Validate sched-config file exists
+if [[ ! -f "$SCHED_CONFIG" ]]; then
+    echo "ERROR: Scheduling configuration file not found: $SCHED_CONFIG"
     exit 1
 fi
 
@@ -114,27 +94,10 @@ if [[ -z "$OUTPUT_FILE" ]]; then
     OUTPUT_FILE="${BASENAME}-output.txt"
 fi
 
-# Create temporary sched-config.json
-TEMP_CONFIG=$(mktemp)
-cat > "$TEMP_CONFIG" << EOF
-{
-    "GPUs": [{"Type": "$GPU_TYPE", "Num": $GPUS}],
-    "Max Model": $GPUS,
-    "Part": 1,
-    "SLO Ratio": 1.1,
-    "Latency Ratio": 1.1,
-    "Interference": $INTERFERENCE,
-    "Avail_Parts": [$(echo $PARTS | tr ',' ' ' | sed 's/ /,/g')],
-    "Incremental": 1
-}
-EOF
-
 echo "=== GPU Scheduler Configuration ==="
 echo "Task config: $TASK_CONFIG"
+echo "Scheduler config: $SCHED_CONFIG"
 echo "Output file: $OUTPUT_FILE"
-echo "GPUs: $GPUS x $GPU_TYPE"
-echo "Partitions: $PARTS"
-echo "Interference: $([ $INTERFERENCE -eq 1 ] && echo "enabled" || echo "disabled")"
 echo "Verbose: $VERBOSE"
 echo ""
 
@@ -144,19 +107,16 @@ if [[ -f "validate_task_config.py" ]]; then
     python3 validate_task_config.py "$TASK_CONFIG"
     if [[ $? -ne 0 ]]; then
         echo "Task configuration validation failed!"
-        rm -f "$TEMP_CONFIG"
         exit 1
     fi
     echo ""
 fi
 
 # Build scheduler command
-# Get script directory to find binary
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-SCHEDULER_CMD="$SCRIPT_DIR/../bin/standalone_scheduler"
+SCHEDULER_CMD="$PROJECT_ROOT/bin/standalone_scheduler"
 SCHEDULER_CMD="$SCHEDULER_CMD --resource_dir $RESOURCE_DIR"
 SCHEDULER_CMD="$SCHEDULER_CMD --task_config $TASK_CONFIG"
-SCHEDULER_CMD="$SCHEDULER_CMD --sched_config $TEMP_CONFIG"
+SCHEDULER_CMD="$SCHEDULER_CMD --sched_config $SCHED_CONFIG"
 SCHEDULER_CMD="$SCHEDULER_CMD --output $OUTPUT_FILE"
 SCHEDULER_CMD="$SCHEDULER_CMD --mem_config $RESOURCE_DIR/mem-config.json"
 SCHEDULER_CMD="$SCHEDULER_CMD --device_config $RESOURCE_DIR/device-config.json"
@@ -172,9 +132,6 @@ echo ""
 
 eval $SCHEDULER_CMD
 SCHEDULER_EXIT_CODE=$?
-
-# Clean up
-rm -f "$TEMP_CONFIG"
 
 # Check result
 if [[ $SCHEDULER_EXIT_CODE -eq 0 ]]; then

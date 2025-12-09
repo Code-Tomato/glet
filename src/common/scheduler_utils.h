@@ -16,7 +16,7 @@ TaskPtr createNewTaskPtr(Task &task);
 int getNumofUsedGPUs(SimState &input);
 int getMaxPartSize(const SimState &input);
 int getMinPartSize(const SimState &input);
-void printSchedulingSummary(SimState &output);
+void printSchedulingSummary(SimState &output, Scheduling::BaseScheduler *scheduler = nullptr);
 
 #else
 #endif

@@ -2,7 +2,7 @@
 	"GPUs":[
 	{
 		"Type":"a100",
-		"Num": 5
+		"Num": 50
 	}],
         "Max Model": 0,
         "Part": 1,

@@ -11,6 +11,8 @@ void copyToOutput(SimState &input, SimState &output){
 		GPUPtr new_gpu_ptr=std::make_shared<GPU>(new_gpu);
 		new_gpu_ptr->GPUID = gpu_ptr->GPUID;
 		new_gpu_ptr->TYPE = gpu_ptr->TYPE;
+		new_gpu_ptr->TOTAL_MEMORY = gpu_ptr->TOTAL_MEMORY;
+		new_gpu_ptr->used_memory = gpu_ptr->used_memory;
 		for(auto node_ptr: gpu_ptr->vNodeList){
 			Node new_node;
 			NodePtr new_node_ptr=std::make_shared<Node>(new_node);
@@ -25,7 +27,7 @@ void copyToOutput(SimState &input, SimState &output){
 				MemNode new_mem_node;
 				new_mem_node.dedup_num=node_ptr->dedup_num;
 				new_mem_node.part=node_ptr->resource_pntg;
-				gpu_ptr->vLoadedParts.push_back(new_mem_node);
+				new_gpu_ptr->vLoadedParts.push_back(new_mem_node);
 			}         
 			for(auto task_ptr : node_ptr->vTaskList){
 				Task new_task;
@@ -174,7 +176,7 @@ int getMinPartSize(const SimState &input){
 	return min_part;
 }
 
-void printSchedulingSummary(SimState &output){
+void printSchedulingSummary(SimState &output, Scheduling::BaseScheduler *scheduler){
 	std::cout << "\n=== SCHEDULING SUMMARY ===" << std::endl;
 	
 	int total_gpus = output.vGPUList.size();
@@ -198,7 +200,14 @@ void printSchedulingSummary(SimState &output){
 				
 				std::cout << "  Partition " << node_ptr->resource_pntg << "%: ";
 				for(auto task_ptr : node_ptr->vTaskList){
-					std::cout << "model_" << task_ptr->id << "(batch=" << task_ptr->batch_size;
+					// Get model name from scheduler if available, otherwise use model_ID
+					std::string model_name;
+					if(scheduler != nullptr) {
+						model_name = scheduler->getModelName(task_ptr->id);
+					} else {
+						model_name = "model_" + std::to_string(task_ptr->id);
+					}
+					std::cout << model_name << "(batch=" << task_ptr->batch_size;
 					if(node_ptr->duty_cycle < 1.0) {
 						std::cout << ",duty=" << (node_ptr->duty_cycle*100) << "%";
 					}
