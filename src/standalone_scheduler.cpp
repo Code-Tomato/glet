@@ -210,7 +210,7 @@ int main(int argc, char* argv[])
 	if(VERBOSE_MODE) {
 		printResults(best_sim);
 	} else {
-		printSchedulingSummary(best_sim);
+		printSchedulingSummary(best_sim, &SBP);
 	}
 	//filters out scheduling attempts that requires too much bandwidth, defined in network_limit.h
 #ifdef CHECK_NETBW

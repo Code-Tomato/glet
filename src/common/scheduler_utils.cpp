@@ -1,7 +1,10 @@
 #include "scheduler_utils.h"
 #include "config.h"
+#include "scheduler_base.h"
 #include <assert.h>
 #include <iostream>
+#include <set>
+#include <utility>
 
 //deep copies input to output
 void copyToOutput(SimState &input, SimState &output){
@@ -174,7 +177,7 @@ int getMinPartSize(const SimState &input){
 	return min_part;
 }
 
-void printSchedulingSummary(SimState &output){
+void printSchedulingSummary(SimState &output, Scheduling::BaseScheduler *scheduler){
 	std::cout << "\n=== SCHEDULING SUMMARY ===" << std::endl;
 	
 	int total_gpus = output.vGPUList.size();
@@ -198,7 +201,13 @@ void printSchedulingSummary(SimState &output){
 				
 				std::cout << "  Partition " << node_ptr->resource_pntg << "%: ";
 				for(auto task_ptr : node_ptr->vTaskList){
-					std::cout << "model_" << task_ptr->id << "(batch=" << task_ptr->batch_size;
+					// Use actual model name if scheduler is available
+					if(scheduler != nullptr){
+						std::string model_name = scheduler->getModelName(task_ptr->id);
+						std::cout << model_name << "(batch=" << task_ptr->batch_size;
+					} else {
+						std::cout << "model_" << task_ptr->id << "(batch=" << task_ptr->batch_size;
+					}
 					if(node_ptr->duty_cycle < 1.0) {
 						std::cout << ",duty=" << (node_ptr->duty_cycle*100) << "%";
 					}
@@ -208,14 +217,16 @@ void printSchedulingSummary(SimState &output){
 			}
 		}
 		
+		// Use the memory value tracked by the scheduler during scheduling
+		// The scheduler is responsible for tracking memory correctly
 		if(gpu_used) {
-			used_gpus++;
 			gpu_memory_used = gpu_ptr->used_memory;
+			used_gpus++;
 			total_memory_used += gpu_memory_used;
 		}
 		total_memory_available += gpu_ptr->TOTAL_MEMORY;
 		
-		std::cout << "  Memory: " << gpu_memory_used << "/" << gpu_ptr->TOTAL_MEMORY << " MB";
+		std::cout << "  Memory: " << (int)gpu_memory_used << "/" << gpu_ptr->TOTAL_MEMORY << " MB";
 		if(gpu_used) {
 			std::cout << " (" << (gpu_memory_used/gpu_ptr->TOTAL_MEMORY*100) << "% used)";
 		}

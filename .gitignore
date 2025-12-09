@@ -99,3 +99,5 @@ nvprof-*
 *resource/*Results/
 *resource/*Configs/
 
+output/
+*-output.txt

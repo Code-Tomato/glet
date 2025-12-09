@@ -24,6 +24,9 @@ class LatencyModel {
 	private:
         float getBatchPartInterpolatedLatency(std::string model, int batch, int part);
         float getBatchInterpolatedLatency(std::string model, int batch, int part);
+        bool hasPartition(std::string model, int part);
+        int getMaxAvailableBatch(std::string model, int part);
+        int findClosestPartition(std::string model, int target_part);
 	std::map<std::string, std::unordered_map<int,float>*> _perModelLatnecyTable;
 	std::map<std::string, std::unordered_map<int,float>*> _perModelGPURatioTable;
 	std::map<std::string, std::map<int,std::vector<int>>> _perModelBatchVec;

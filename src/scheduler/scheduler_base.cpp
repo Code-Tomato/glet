@@ -241,6 +241,13 @@ namespace Scheduling{
 		return id;
 	}
 
+	int BaseScheduler::getModelMemUSsage(int model_id){
+		if(_mapModelIDtoMemSize.find(model_id) != _mapModelIDtoMemSize.end()){
+			return _mapModelIDtoMemSize[model_id];
+		}
+		return 0;
+	}
+
  void BaseScheduler::setupTasks(std::string task_csv_file, std::vector<Task> *task_list){
                 std::string str_buf;
                 std::fstream fs;

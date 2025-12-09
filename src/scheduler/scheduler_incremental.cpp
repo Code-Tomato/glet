@@ -11,7 +11,7 @@
 
 
 namespace Scheduling{
-	const int TRP_SLACK=15;
+	const int TRP_SLACK=0; // Lowered from 15 to allow scheduling of low-rate tasks (was skipping tasks with rate <= 15 RPS)
 	IncrementalScheduler::IncrementalScheduler(){}
 	IncrementalScheduler::~IncrementalScheduler(){}
 
@@ -151,7 +151,23 @@ namespace Scheduling{
 				//if not, setup a table
 				initSaturateTrp(task);
 			}
+			// Verify that saturate table was created successfully
+			if (_perModelSatTable.find(task.id) == _perModelSatTable.end() ||
+			    _perModelSatTable[task.id] == nullptr ||
+			    _perModelSatTable[task.id]->empty()){
+				std::cerr << "ERROR: [elasticPartitioning] Failed to create saturate table for task " 
+				          << task.id << " (" << getModelName(task.id) << ")" << std::endl;
+				std::cerr << "  Request rate: " << task.request_rate << " RPS, SLO: " << task.SLO << " ms" << std::endl;
+				std::cerr << "  This task will be skipped. Possible reasons:" << std::endl;
+				std::cerr << "    1. SLO is too tight (even batch=1 cannot meet SLO)" << std::endl;
+				std::cerr << "    2. Missing latency data in LATENCY.CSV" << std::endl;
+				std::cerr << "    3. Invalid model configuration" << std::endl;
+				continue; // Skip this task and continue with others
+			}
 			if(addModeltoSchedule(task, decision)){
+				std::cerr << "ERROR: [elasticPartitioning] Failed to schedule task " << task.id 
+				          << " (" << getModelName(task.id) << ")" << std::endl;
+				std::cerr << "  Request rate: " << task.request_rate << " RPS, SLO: " << task.SLO << " ms" << std::endl;
 #ifdef SCHED_DEBUG
 				std::cout << "[incrementalScheduling] adding model failed!" << std::endl;
 #endif
@@ -162,19 +178,20 @@ namespace Scheduling{
 			printResults(decision);
 #endif
 		}
-
+		return EXIT_SUCCESS;
 	}
 
 // stores value for saturating throughput of each available partition
 	void IncrementalScheduler::initSaturateTrp(Task &task)
 	{
 #ifdef SCHED_DEBUG
-		std::cout << "[initSaturateTrp] Called for task  " << task.id << std::endl;
+		std::cout << "[initSaturateTrp] Called for task  " << task.id << " (" << getModelName(task.id) << ")" << std::endl;
 #endif
 		std::vector<SatTrpEntry> *new_table = new std::vector<SatTrpEntry>();
 		Node temp_node;
 		SimState dummy_sim;
 		NodePtr temp_node_ptr=std::make_shared<Node>(temp_node);
+		bool any_partition_succeeded = false;
 		for(auto type_num_pair : _typeToNumofTypeTable){
 			std::string type= type_num_pair.first;
 			for(auto part : _availParts){
@@ -184,6 +201,11 @@ namespace Scheduling{
 				// check if this is because 2*L(b=1) > SLO
 				if (batch_size ==0){
 					float latency = getLatency(type,task.id,1,temp_node_ptr->resource_pntg);
+					if (latency == 0.0){
+						std::cerr << "WARNING: [initSaturateTrp] No latency data for task " << task.id 
+						          << " (" << getModelName(task.id) << ") with batch=1, partition=" << part << std::endl;
+						continue; // Skip this partition, try next one
+					}
 					if ( 2*latency > task.SLO) {
 						batch_size=1;
 #ifdef SCHED_DEBUG
@@ -192,11 +214,19 @@ namespace Scheduling{
 
 					}
 					else{
-						std::cout << "[initSaturateTrp] cannot setup SaturateTable for task : " << task.id << std::endl;
-						return;
+						std::cerr << "WARNING: [initSaturateTrp] Cannot setup saturate table for task " << task.id 
+						          << " (" << getModelName(task.id) << ") with partition " << part 
+						          << " (batch_size=0, latency=" << latency << " ms, SLO=" << task.SLO << " ms)" << std::endl;
+						continue; // Skip this partition, try next one
 					}
 				}
 				float latency = getLatency(type,task.id,batch_size,temp_node_ptr->resource_pntg);
+				if(latency == 0.0){
+					std::cerr << "WARNING: [initSaturateTrp] No latency data for task " << task.id 
+					          << " (" << getModelName(task.id) << ") with batch=" << batch_size 
+					          << ", partition=" << part << std::endl;
+					continue; // Skip this partition
+				}
 				float trp = batch_size * 1000.0 / latency;
 				SatTrpEntry new_entry;
 				new_entry.max_batch=batch_size;
@@ -204,12 +234,20 @@ namespace Scheduling{
 				new_entry.sat_trp=trp;
 				new_entry.type=type;
 				new_table->push_back(new_entry);
+				any_partition_succeeded = true;
 #ifdef SCHED_DEBUG
 				std::cout << "[initSaturateTrp] setted up resource pntg: " << new_entry.part <<", as trp:  "<< new_entry.sat_trp<< std::endl;
 #endif
 			}
 		}
-		_perModelSatTable[task.id]=new_table;
+		if(any_partition_succeeded){
+			_perModelSatTable[task.id]=new_table;
+		} else {
+			std::cerr << "ERROR: [initSaturateTrp] Failed to setup SaturateTable for task " << task.id 
+			          << " (" << getModelName(task.id) << ") - no valid partitions found" << std::endl;
+			std::cerr << "  Request rate: " << task.request_rate << " RPS, SLO: " << task.SLO << " ms" << std::endl;
+			delete new_table; // Clean up since we're not using it
+		}
 	}
 
 	void IncrementalScheduler::estimateTrp(std::string device, Task &task, int rate, std::vector<NodePtr> &output_vec, const int MAX_PART){
@@ -634,9 +672,20 @@ bool IncrementalScheduler::addModeltoSchedule(Task &task, SimState &decision){
 		// receives task, and resource percentage the task will run as input and stores the maximum batch size it can support
 	// returns maximum throughput for that throughput
 	float IncrementalScheduler::getMaxSaturateTrp(const Task &task, int &output_batch, const int resource_pntg, std::string type){
+		// Check if saturate table exists for this task
+		if(_perModelSatTable.find(task.id) == _perModelSatTable.end() || 
+		   _perModelSatTable[task.id] == nullptr || 
+		   _perModelSatTable[task.id]->empty()){
+			std::cerr << "ERROR: [getMaxSaturateTrp] No saturate table found for task " << task.id 
+			          << " (" << getModelName(task.id) << ")" << std::endl;
+			std::cerr << "  This usually means initSaturateTrp failed for this task." << std::endl;
+			std::cerr << "  Possible reasons: SLO too tight, missing latency data, or invalid configuration." << std::endl;
+			output_batch = 0;
+			return 0.0;
+		}
 
 		bool found=false;
-		float trp;
+		float trp = 0.0;
 		for(auto entry : *_perModelSatTable[task.id]){
 			if(resource_pntg == entry.part && type == entry.type)
 			{
@@ -645,7 +694,12 @@ bool IncrementalScheduler::addModeltoSchedule(Task &task, SimState &decision){
 				output_batch=entry.max_batch;
 			}
 		}
-		assert(found); // if this is not found we have a problem
+		if(!found){
+			std::cerr << "WARNING: [getMaxSaturateTrp] No entry found for task " << task.id 
+			          << " with partition " << resource_pntg << " and type " << type << std::endl;
+			output_batch = 0;
+			return 0.0;
+		}
 		return trp;
 	}
 

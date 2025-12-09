@@ -5,6 +5,8 @@
 #include <utility>
 #include <cassert>
 #include <algorithm>
+#include <limits>
+#include <cmath>
 
 #define MAX_BATCH 32
 #define MIN_BATCH 1
@@ -53,14 +55,65 @@ Entry* LatencyModel::parseKey(int key){
     return new_entry;
 }
 
+// Helper function to check if a partition exists for a model
+bool LatencyModel::hasPartition(std::string model, int part){
+    if(_perModelBatchVec.find(model) == _perModelBatchVec.end()){
+        return false;
+    }
+    if(_perModelBatchVec[model].find(part) == _perModelBatchVec[model].end()){
+        return false;
+    }
+    return !_perModelBatchVec[model][part].empty();
+}
+
+// Helper function to find the maximum available batch for a partition
+int LatencyModel::getMaxAvailableBatch(std::string model, int part){
+    if(!hasPartition(model, part)){
+        return -1;
+    }
+    std::vector<int> &batches = _perModelBatchVec[model][part];
+    if(batches.empty()){
+        return -1;
+    }
+    return *std::max_element(batches.begin(), batches.end());
+}
+
+// Helper function to find the closest available partition
+int LatencyModel::findClosestPartition(std::string model, int target_part){
+    if(_perModelBatchVec.find(model) == _perModelBatchVec.end()){
+        return -1;
+    }
+    
+    int closest_part = -1;
+    int min_diff = std::numeric_limits<int>::max();
+    
+    for(auto &part_pair : _perModelBatchVec[model]){
+        if(!part_pair.second.empty()){
+            int diff = std::abs(part_pair.first - target_part);
+            if(diff < min_diff){
+                min_diff = diff;
+                closest_part = part_pair.first;
+            }
+        }
+    }
+    
+    return closest_part;
+}
 
 std::pair<int,int> findBatchpair(std::vector<int> &list, int batch, int part)
 {
     assert(MIN_BATCH < batch && batch < MAX_BATCH);
-    std::pair<int,int> retPair;
+    std::pair<int,int> retPair(-1, -1); // Initialize with sentinel values
+    
+    // Check if list is empty
+    if(list.empty()){
+        return retPair; // Return sentinel values indicating no batches found
+    }
+    
     std::vector<int>::iterator it;
     int lowerbatch = batch;
-    while(true){
+    // Find lower bound with bounds checking
+    while(lowerbatch >= MIN_BATCH){
         it=find(list.begin(), list.end(), lowerbatch);
         if(it !=list.end()) {
            retPair.first=lowerbatch;
@@ -68,8 +121,15 @@ std::pair<int,int> findBatchpair(std::vector<int> &list, int batch, int part)
         }
         lowerbatch--;
     }
+    
+    // If no lower batch found, return sentinel
+    if(retPair.first == -1){
+        return retPair;
+    }
+    
     int upperbatch = batch;
-    while(true){
+    // Find upper bound with bounds checking
+    while(upperbatch <= MAX_BATCH){
         upperbatch++;
         it=find(list.begin(), list.end(), upperbatch);
         if(it !=list.end()) {
@@ -77,6 +137,12 @@ std::pair<int,int> findBatchpair(std::vector<int> &list, int batch, int part)
            break;
         }
     }
+    
+    // If no upper batch found, return sentinel
+    if(retPair.second == -1){
+        return retPair;
+    }
+    
     return retPair;
 }
 
@@ -88,7 +154,17 @@ std::pair<int,int> findBatchpair(std::vector<int> &list, int batch, int part)
     {
         keys_vec.push_back(it->first);
     }
-    assert(keys_vec.size() >= 2);
+    
+    if(keys_vec.size() < 2){
+        // Not enough data for interpolation, try direct lookup or return 0
+        int key = makeKey(batch, part);
+        auto it = _perModelLatnecyTable[model]->find(key);
+        if(it != _perModelLatnecyTable[model]->end()){
+            return it->second;
+        }
+        return 0.0;
+    }
+    
     sort(keys_vec.begin(), keys_vec.end());
     Entry* temp = parseKey(keys_vec.front());
     int min_part = temp->part;
@@ -96,34 +172,146 @@ std::pair<int,int> findBatchpair(std::vector<int> &list, int batch, int part)
     temp = parseKey(keys_vec.back());
     int max_part = temp->part;
     delete temp;
-    // assume that every part has max batch size profiled
-    int temp_key1 = makeKey(MAX_BATCH,min_part);
-    int temp_key2 = makeKey(MAX_BATCH,part);
-    int temp_key3 = makeKey(MAX_BATCH,max_part);
-    float y1 = getBatchInterpolatedLatency(model,MAX_BATCH,min_part);
-    float y =  getBatchInterpolatedLatency(model,MAX_BATCH,part);
-    float y2 = getBatchInterpolatedLatency(model,MAX_BATCH,max_part);
-    float b=(y-y2)/(y1-y2);
-    y1=getBatchInterpolatedLatency(model,batch,min_part);
-    y2=getBatchInterpolatedLatency(model,batch,max_part);
-    float diff=y1-y2;
-    return diff*b + y2;
+    
+    // Check if requested partition exists, if not find closest
+    int actual_part = part;
+    if(!hasPartition(model, part)){
+        int closest_part = findClosestPartition(model, part);
+        if(closest_part == -1){
+            return 0.0;
+        }
+        actual_part = closest_part;
+    }
+    
+    // Find maximum available batch for each partition (may not be MAX_BATCH)
+    int max_batch_min_part = getMaxAvailableBatch(model, min_part);
+    int max_batch_actual_part = getMaxAvailableBatch(model, actual_part);
+    int max_batch_max_part = getMaxAvailableBatch(model, max_part);
+    
+    if(max_batch_min_part == -1 || max_batch_actual_part == -1 || max_batch_max_part == -1){
+        // Missing data for partitions, fall back to simpler interpolation
+        return getBatchInterpolatedLatency(model, batch, actual_part);
+    }
+    
+    // Use the maximum available batch for each partition instead of assuming MAX_BATCH
+    float y1 = getBatchInterpolatedLatency(model, max_batch_min_part, min_part);
+    float y =  getBatchInterpolatedLatency(model, max_batch_actual_part, actual_part);
+    float y2 = getBatchInterpolatedLatency(model, max_batch_max_part, max_part);
+    
+    if(y1 == 0.0 || y == 0.0 || y2 == 0.0){
+        // Fall back to direct interpolation for the requested partition
+        return getBatchInterpolatedLatency(model, batch, actual_part);
+    }
+    
+    // Avoid division by zero
+    if(std::abs(y1 - y2) < 1e-6){
+        return y;
+    }
+    
+    float b = (y - y2) / (y1 - y2);
+    y1 = getBatchInterpolatedLatency(model, batch, min_part);
+    y2 = getBatchInterpolatedLatency(model, batch, max_part);
+    
+    if(y1 == 0.0 || y2 == 0.0){
+        // Fall back to direct interpolation for the requested partition
+        return getBatchInterpolatedLatency(model, batch, actual_part);
+    }
+    
+    float diff = y1 - y2;
+    return diff * b + y2;
  }
 
  float LatencyModel::getBatchInterpolatedLatency(std::string model, int batch, int part){
-    uint64_t p1,p2,p3,p4;
+    // Check if partition exists, if not try to find closest one
+    if(!hasPartition(model, part)){
+        int closest_part = findClosestPartition(model, part);
+        if(closest_part == -1){
+            // No partitions available for this model, return 0
+            return 0.0;
+        }
+        part = closest_part; // Use closest partition
+    }
+    
     // if batch is in the table, lookup and return
     if(batch == MIN_BATCH || batch == MAX_BATCH){
-        return _perModelLatnecyTable[model]->operator[](makeKey(batch,part));
+        int key = makeKey(batch, part);
+        auto it = _perModelLatnecyTable[model]->find(key);
+        if(it != _perModelLatnecyTable[model]->end()){
+            return it->second;
+        }
+        // If exact batch not found, try to find closest available batch
+        if(_perModelBatchVec[model][part].empty()){
+            return 0.0;
+        }
+        std::vector<int> &batches = _perModelBatchVec[model][part];
+        int closest_batch = batches[0];
+        int min_diff = std::abs(batches[0] - batch);
+        for(int b : batches){
+            int diff = std::abs(b - batch);
+            if(diff < min_diff){
+                min_diff = diff;
+                closest_batch = b;
+            }
+        }
+        int closest_key = makeKey(closest_batch, part);
+        auto closest_it = _perModelLatnecyTable[model]->find(closest_key);
+        if(closest_it != _perModelLatnecyTable[model]->end()){
+            return closest_it->second;
+        }
+        return 0.0;
     } 
-    // if not, do interpolation
+    
+    // Check if batch vector is empty for this partition
+    if(_perModelBatchVec[model][part].empty()){
+        return 0.0;
+    }
+    
+    // if not, do interpolation (batch is between MIN_BATCH and MAX_BATCH)
     std::pair<int,int> two_batch = findBatchpair(_perModelBatchVec[model][part], batch, part);
+
+    // Check if findBatchpair found valid batches
+    if(two_batch.first == -1 || two_batch.second == -1){
+        // Could not find bounding batches, try to use available data
+        std::vector<int> &batches = _perModelBatchVec[model][part];
+        if(batches.empty()){
+            return 0.0;
+        }
+        // Use the closest available batch
+        int closest_batch = batches[0];
+        int min_diff = std::abs(batches[0] - batch);
+        for(int b : batches){
+            int diff = std::abs(b - batch);
+            if(diff < min_diff){
+                min_diff = diff;
+                closest_batch = b;
+            }
+        }
+        int key = makeKey(closest_batch, part);
+        auto it = _perModelLatnecyTable[model]->find(key);
+        if(it != _perModelLatnecyTable[model]->end()){
+            return it->second;
+        }
+        return 0.0;
+    }
 
     int b1 = two_batch.first;
     int b2 = two_batch.second;
-    float l1=_perModelLatnecyTable[model]->operator[](makeKey(b1,part));
-    float l2=_perModelLatnecyTable[model]->operator[](makeKey(b2,part));
-    assert(l1 != 0.0 && l2 != 0.0);
+    int key1 = makeKey(b1, part);
+    int key2 = makeKey(b2, part);
+    auto it1 = _perModelLatnecyTable[model]->find(key1);
+    auto it2 = _perModelLatnecyTable[model]->find(key2);
+    
+    if(it1 == _perModelLatnecyTable[model]->end() || it2 == _perModelLatnecyTable[model]->end()){
+        return 0.0;
+    }
+    
+    float l1 = it1->second;
+    float l2 = it2->second;
+    
+    if(l1 == 0.0 || l2 == 0.0){
+        return 0.0;
+    }
+    
     float ret_latency = (l2-l1)/float(b2-b1) * (batch-b1) + l1;
     return ret_latency;
  }
@@ -165,18 +353,101 @@ float LatencyModel::getGPURatio(std::string model, int batch, int part){
     if (model == "ssd-mobilenetv1"){
         model="ssd";
     }
-    uint64_t p1,p2,p3,p4;
+    
+    // Check if model exists
+    if(_perModelGPURatioTable.find(model) == _perModelGPURatioTable.end()){
+        return 0.0;
+    }
+    
+    // Check if partition exists, if not try to find closest one
+    if(!hasPartition(model, part)){
+        int closest_part = findClosestPartition(model, part);
+        if(closest_part == -1){
+            return 0.0;
+        }
+        part = closest_part;
+    }
+    
     // if batch is in the table, lookup and return
     if(batch == MIN_BATCH || batch == MAX_BATCH){
-        return _perModelGPURatioTable[model]->operator[](makeKey(batch,part));
+        int key = makeKey(batch, part);
+        auto it = _perModelGPURatioTable[model]->find(key);
+        if(it != _perModelGPURatioTable[model]->end()){
+            return it->second;
+        }
+        // If exact batch not found, try to find closest available batch
+        if(_perModelBatchVec[model][part].empty()){
+            return 0.0;
+        }
+        std::vector<int> &batches = _perModelBatchVec[model][part];
+        int closest_batch = batches[0];
+        int min_diff = std::abs(batches[0] - batch);
+        for(int b : batches){
+            int diff = std::abs(b - batch);
+            if(diff < min_diff){
+                min_diff = diff;
+                closest_batch = b;
+            }
+        }
+        int closest_key = makeKey(closest_batch, part);
+        auto closest_it = _perModelGPURatioTable[model]->find(closest_key);
+        if(closest_it != _perModelGPURatioTable[model]->end()){
+            return closest_it->second;
+        }
+        return 0.0;
     } 
-    // if not, do interpolation
+    
+    // Check if batch vector is empty for this partition
+    if(_perModelBatchVec[model][part].empty()){
+        return 0.0;
+    }
+    
+    // if not, do interpolation (batch is between MIN_BATCH and MAX_BATCH)
     std::pair<int,int> two_batch = findBatchpair(_perModelBatchVec[model][part], batch, part);
+    
+    // Check if findBatchpair found valid batches
+    if(two_batch.first == -1 || two_batch.second == -1){
+        // Could not find bounding batches, try to use available data
+        std::vector<int> &batches = _perModelBatchVec[model][part];
+        if(batches.empty()){
+            return 0.0;
+        }
+        // Use the closest available batch
+        int closest_batch = batches[0];
+        int min_diff = std::abs(batches[0] - batch);
+        for(int b : batches){
+            int diff = std::abs(b - batch);
+            if(diff < min_diff){
+                min_diff = diff;
+                closest_batch = b;
+            }
+        }
+        int key = makeKey(closest_batch, part);
+        auto it = _perModelGPURatioTable[model]->find(key);
+        if(it != _perModelGPURatioTable[model]->end()){
+            return it->second;
+        }
+        return 0.0;
+    }
+    
     int b1 = two_batch.first;
     int b2 = two_batch.second;
-    float g1=_perModelGPURatioTable[model]->operator[](makeKey(b1,part));
-    float g2=_perModelGPURatioTable[model]->operator[](makeKey(b2,part));
-    assert(g1 != 0.0 && g2 != 0.0);
+    int key1 = makeKey(b1, part);
+    int key2 = makeKey(b2, part);
+    auto it1 = _perModelGPURatioTable[model]->find(key1);
+    auto it2 = _perModelGPURatioTable[model]->find(key2);
+    
+    if(it1 == _perModelGPURatioTable[model]->end() || it2 == _perModelGPURatioTable[model]->end()){
+        return 0.0;
+    }
+    
+    float g1 = it1->second;
+    float g2 = it2->second;
+    
+    if(g1 == 0.0 || g2 == 0.0){
+        return 0.0;
+    }
+    
     //2. do linear interpolation and return;
     float ret_gpu_ratio = (g2-g1)/float(b2-b1) * (batch-b1) + g1;
     return ret_gpu_ratio;
